@@ -1,0 +1,36 @@
+{
+  "compilerOptions": {
+    "target": "esnext",
+    "lib": ["ESNext"],
+    "baseUrl": "./src",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "paths": {
+      "@/*": ["*"]
+    },
+    "resolveJsonModule": true,
+    "types": [
+      "node"
+    ],
+    "allowImportingTsExtensions": true,
+    "strict": true,
+    "noImplicitAny": true,
+    "declaration": true,
+    "noEmit": true,
+    "outDir": "./dist",
+    "sourceMap": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true
+  },
+  "include": [
+    "src/**/*",
+    "../test/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "prisma"
+  ]
+}
