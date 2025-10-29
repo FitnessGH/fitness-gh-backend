@@ -5,8 +5,7 @@ import express from "express";
 import helmet from "helmet";
 import morgan from "morgan";
 
-import api from "@/api";
-import { healthStatusRoute } from "@/core/routes";
+import { healthStatusRoute, infoRoute, initialRoute } from "@/core/routes";
 import { NotFoundError } from "@/errors";
 import { errorHandler } from "@/middlewares";
 
@@ -27,14 +26,10 @@ class CreateApp {
     this.app.use(express.urlencoded({ extended: false }));
 
     // Root route
-    this.app.get("/", (req, res) => {
-      res.json({
-        message: "Welcome to Fitness GH Backend API - 🚀",
-      });
-    });
+    this.app.use(initialRoute);
 
-    // API routes
-    this.app.use("/api/v1", api);
+    // Info route
+    this.app.use(infoRoute);
 
     // Health check route
     this.app.use(healthStatusRoute);

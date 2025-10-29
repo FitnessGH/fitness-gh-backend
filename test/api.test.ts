@@ -3,10 +3,10 @@ import { describe, it } from "vitest";
 
 import app from "../src/app.js";
 
-describe("GET /api/v1", () => {
+describe("GET /", () => {
   it("responds with a json message", () =>
     request(app)
-      .get("/api/v1")
+      .get("/")
       .set("Accept", "application/json")
       .expect("Content-Type", /json/)
       .expect(200, {

@@ -1,9 +1,10 @@
-import { Router } from "express";
-
+import { BaseRoute } from "@/core/base-route";
 import HealthCheckController from "@/core/controllers/health-check.controller";
 
-const router: Router = Router();
+class HealthCheckRoute extends BaseRoute {
+  protected initializeRoutes(): void {
+    this.get("/health-check", HealthCheckController.getHealthStatus);
+  }
+}
 
-router.get("/health-check", HealthCheckController.getHealthStatus);
-
-export default router;
+export default new HealthCheckRoute().getRouter();
