@@ -75,3 +75,4 @@ typings/
 dist
 
 examples
+/src/generated/prisma
