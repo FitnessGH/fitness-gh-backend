@@ -1,4 +1,5 @@
-import type { Router, RequestHandler, Request, Response, NextFunction } from "express";
+import type { NextFunction, Request, RequestHandler, Response, Router } from "express";
+
 import { createRouter } from "@/utils/router";
 
 /**

@@ -23,7 +23,7 @@ export default antfu({
     }],
     "unicorn/filename-case": ["error", {
       case: "kebabCase",
-      ignore: ["README.md"],
+      ignore: ["*.md"],
     }],
     "test/prefer-lowercase-title": ["off"],
   },

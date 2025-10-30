@@ -1,7 +1,8 @@
-import { BaseRoute } from "@/core/base-route";
 import type { Request, Response } from "express";
 
-class ApiRoute extends BaseRoute {
+import { BaseRoute } from "@/core/base-route";
+
+class RootRoute extends BaseRoute {
   protected initializeRoutes(): void {
     this.get("/", this.getRoot.bind(this));
   }
@@ -9,9 +10,14 @@ class ApiRoute extends BaseRoute {
   private getRoot(req: Request, res: Response): void {
     res.json({
       message: "Welcome to Fitness GH Backend API - 🚀",
+      version: "1.0.0",
+      endpoints: {
+        users: "/api/v1/users",
+        health: "/health",
+        info: "/info",
+      },
     });
   }
-
 }
 
-export default new ApiRoute().getRouter();
+export default new RootRoute().getRouter();

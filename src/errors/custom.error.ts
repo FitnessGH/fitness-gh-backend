@@ -6,9 +6,9 @@ export class CustomError extends Error {
   stack?: string | undefined;
   constructor({
     message,
-        status = 500,
-        success = false,
-        data = null,
+    status = 500,
+    success = false,
+    data = null,
     details = null,
     stack,
   }: {

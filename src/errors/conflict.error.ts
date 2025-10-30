@@ -16,10 +16,10 @@ export class ConflictError extends CustomError {
  */
   constructor({
     message,
-        status = 409,
-        success = false,
-        data = null,
-        details = null,
+    status = 409,
+    success = false,
+    data = null,
+    details = null,
   }: {
     message: string;
     status?: number;

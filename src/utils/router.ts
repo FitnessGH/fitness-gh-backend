@@ -1,4 +1,6 @@
-import { Router, type RouterOptions } from "express";
+import type { RouterOptions } from "express";
+
+import { Router } from "express";
 
 /**
  * Creates a new Express Router instance with default configuration

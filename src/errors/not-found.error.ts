@@ -3,10 +3,10 @@ import { CustomError } from "@/errors/custom.error";
 export class NotFoundError extends CustomError {
   constructor({
     message,
-        status = 404,
-        success = false,
-        data = null,
-        details = null,
+    status = 404,
+    success = false,
+    data = null,
+    details = null,
   }: {
     message: string;
     status?: number;

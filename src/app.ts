@@ -5,7 +5,9 @@ import express from "express";
 import helmet from "helmet";
 import morgan from "morgan";
 
-import { healthStatusRoute, infoRoute, initialRoute } from "@/core/routes";
+import apiRoute from "@/api/index";
+import { API_PREFIXES } from "@/config";
+import { healthStatusRoute, infoRoute, rootRoute } from "@/core/routes";
 import { NotFoundError } from "@/errors";
 import { errorHandler } from "@/middlewares";
 
@@ -26,13 +28,16 @@ class CreateApp {
     this.app.use(express.urlencoded({ extended: false }));
 
     // Root route
-    this.app.use(initialRoute);
+    this.app.use(rootRoute);
 
     // Info route
     this.app.use(infoRoute);
 
     // Health check route
     this.app.use(healthStatusRoute);
+
+    // API routes
+    this.app.use(API_PREFIXES.V1, apiRoute);
 
     this.app.use((req) => {
       throw new NotFoundError({
