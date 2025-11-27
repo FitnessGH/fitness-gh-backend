@@ -11,6 +11,7 @@ import {
   updateUserSchema,
   userIdSchema,
 } from "../validations/user.validation.js";
+import { error, success } from "@/utils/response.util.js";
 
 class UserController {
   /**
@@ -19,11 +20,11 @@ class UserController {
   static async getUsers(req: Request, res: Response): Promise<void> {
     try {
       const users = await UserService.getAllUsers();
-      res.json(users);
+      res.json(success(users));
     }
-    catch (error) {
-      console.error("Error fetching users:", error);
-      res.status(500).json({ error: "Failed to fetch users" });
+    catch (err) {
+      console.error("Error fetching users:", err);
+      res.status(500).json(error("Failed to fetch users", 500, null, null));
     }
   }
 
@@ -38,24 +39,26 @@ class UserController {
       const user = await UserService.getUserById(id);
 
       if (!user) {
-        res.status(404).json({ error: "User not found" });
+        res.status(404).json(error("User not found", 404, null, null));
         return;
       }
 
-      res.json(user);
+      res.json(success(user));
     }
-    catch (error) {
-      console.error("Error fetching user:", error);
+    catch (err) {
+      console.error("Error fetching user:", err);
 
-      if (error instanceof z.ZodError) {
-        res.status(400).json({
-          error: "Invalid request parameters",
-          details: error.errors,
-        });
+      if (err instanceof z.ZodError) {
+        res.status(400).json(error(
+          "Invalid request parameters",
+          400,
+          err.errors,
+          null,
+        ));
         return;
       }
 
-      res.status(500).json({ error: "Failed to fetch user" });
+      res.status(500).json(error("Failed to fetch user", 500, null, null));
     }
   }
 
@@ -69,28 +72,30 @@ class UserController {
 
       const user = await UserService.createUser(userData);
 
-      res.status(201).json(user);
+      res.status(201).json(success(user));
     }
-    catch (error) {
-      console.error("Error creating user:", error);
+    catch (err) {
+      console.error("Error creating user:", err);
 
-      if (error instanceof z.ZodError) {
-        res.status(400).json({
-          error: "Invalid request data",
-          details: error.errors,
-        });
+      if (err instanceof z.ZodError) {
+        res.status(400).json(error(
+          "Invalid request data",
+          400,
+          err.errors,
+          null,
+        ));
         return;
       }
 
       // Handle business logic errors with specific status codes
-      if (error instanceof Error) {
-        if (error.message.includes("already exists")) {
-          res.status(409).json({ error: error.message });
+      if (err instanceof Error) {
+        if (err.message.includes("already exists")) {
+          res.status(409).json(error(err.message, 409, null, null));
           return;
         }
       }
 
-      res.status(500).json({ error: "Failed to create user" });
+      res.status(500).json(error("Failed to create user", 500, null, null));
     }
   }
 
@@ -105,26 +110,28 @@ class UserController {
 
       const user = await UserService.updateUser(id, userData);
 
-      res.json(user);
+      res.json(success(user));
     }
-    catch (error) {
-      console.error("Error updating user:", error);
+    catch (err) {
+      console.error("Error updating user:", err);
 
-      if (error instanceof z.ZodError) {
-        res.status(400).json({
-          error: "Invalid request data",
-          details: error.errors,
-        });
+      if (err instanceof z.ZodError) {
+        res.status(400).json(error(
+          "Invalid request data",
+          400,
+          err.errors,
+          null,
+        ));
         return;
       }
 
       // Handle business logic errors with specific status codes
-      if (error instanceof Error && error.message === "User not found") {
-        res.status(404).json({ error: error.message });
+      if (err instanceof Error && err.message === "User not found") {
+        res.status(404).json(error(err.message, 404, null, null));
         return;
       }
 
-      res.status(500).json({ error: "Failed to update user" });
+      res.status(500).json(error("Failed to update user", 500, null, null));
     }
   }
 
@@ -139,24 +146,26 @@ class UserController {
       await UserService.deleteUser(id);
       res.status(204).send();
     }
-    catch (error) {
-      console.error("Error deleting user:", error);
+    catch (err) {
+      console.error("Error deleting user:", err);
 
-      if (error instanceof z.ZodError) {
-        res.status(400).json({
-          error: "Invalid request parameters",
-          details: error.errors,
-        });
+      if (err instanceof z.ZodError) {
+        res.status(400).json(error(
+          "Invalid request parameters",
+          400,
+          err.errors,
+          null,
+        ));
         return;
       }
 
       // Handle business logic errors with specific status codes
-      if (error instanceof Error && error.message === "User not found") {
-        res.status(404).json({ error: error.message });
+      if (err instanceof Error && err.message === "User not found") {
+        res.status(404).json(error(err.message, 404, null, null));
         return;
       }
 
-      res.status(500).json({ error: "Failed to delete user" });
+      res.status(500).json(error("Failed to delete user", 500, null, null));
     }
   }
 
@@ -169,20 +178,22 @@ class UserController {
       const { q } = searchUserSchema.parse(req.query);
 
       const users = await UserService.searchUsers(q);
-      res.json(users);
+      res.json(success(users));
     }
-    catch (error) {
-      console.error("Error searching users:", error);
+    catch (err) {
+      console.error("Error searching users:", err);
 
-      if (error instanceof z.ZodError) {
-        res.status(400).json({
-          error: "Invalid search parameters",
-          details: error.errors,
-        });
+      if (err instanceof z.ZodError) {
+        res.status(400).json(error(
+          "Invalid search parameters",
+          400,
+          err.errors,
+          null,
+        ));
         return;
       }
 
-      res.status(500).json({ error: "Failed to search users" });
+      res.status(500).json(error("Failed to search users", 500, null, null));
     }
   }
 
@@ -198,11 +209,11 @@ class UserController {
         timestamp: new Date().toISOString(),
       };
 
-      res.json(stats);
+      res.json(success(stats));
     }
-    catch (error) {
-      console.error("Error fetching user stats:", error);
-      res.status(500).json({ error: "Failed to fetch user statistics" });
+    catch (err) {
+      console.error("Error fetching user stats:", err);
+      res.status(500).json(error("Failed to fetch user statistics", 500, null, null));
     }
   }
 }
