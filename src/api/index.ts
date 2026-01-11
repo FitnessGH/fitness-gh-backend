@@ -2,6 +2,7 @@ import { BaseRoute } from "@/core/base-route";
 
 import { authRoute } from "./auth/index.js";
 import { gymRoute } from "./gyms/index.js";
+import { paymentRoute } from "./payments/index.js";
 import { subscriptionRoute } from "./subscriptions/index.js";
 import { userRoute } from "./users/index.js";
 
@@ -10,6 +11,7 @@ class ApiRoute extends BaseRoute {
     // Mount sub-routes
     this.router.use("/auth", authRoute);
     this.router.use("/gyms", gymRoute);
+    this.router.use("/payments", paymentRoute);
     this.router.use("/subscriptions", subscriptionRoute);
     this.router.use("/users", userRoute);
   }

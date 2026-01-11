@@ -96,6 +96,7 @@ model UserProfile {
   ownedGyms   Gym[]        @relation("GymOwner")
   employments Employment[]
   memberships Membership[]
+  payments    Payment[]
   
   @@map("user_profiles")
 }
@@ -145,6 +146,7 @@ model Gym {
   employees         Employment[]
   subscriptionPlans SubscriptionPlan[]
   memberships       Membership[]
+  payments          Payment[]
   
   @@map("gyms")
 }
@@ -257,6 +259,9 @@ model Membership {
   updatedAt       DateTime         @updatedAt
   cancelledAt     DateTime?
   
+  // Relations
+  payments        Payment[]
+  
   @@unique([profileId, gymId, planId])
   @@map("memberships")
 }
@@ -267,6 +272,47 @@ enum MembershipStatus {
   EXPIRED     // Past end date
   CANCELLED   // Cancelled by user
   SUSPENDED   // Suspended by gym
+}
+
+// ============================================
+// PAYMENT - Transaction records
+// ============================================
+model Payment {
+  id              String           @id @default(cuid())
+  
+  // Links
+  profileId       String
+  profile         UserProfile      @relation(fields: [profileId], references: [id])
+  gymId           String
+  gym             Gym              @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  
+  // Context
+  membershipId    String?
+  membership      Membership?      @relation(fields: [membershipId], references: [id])
+  
+  // Payment Details
+  amount          Float
+  currency        String           @default("GHS")
+  reference       String           @unique // Payment provider reference
+  provider        String           // e.g., "PAYSTACK", "STRIPE", "SIMULATOR"
+  channel         String?          // e.g., "card", "mobile_money"
+  
+  // Status
+  status          PaymentStatus    @default(PENDING)
+  
+  // Timestamps
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  paidAt          DateTime?
+  
+  @@map("payments")
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
 }
 
 // Enums
