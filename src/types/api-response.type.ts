@@ -18,8 +18,9 @@ export interface ApiMeta {
  */
 export interface ApiSuccessResponse<T = any> {
   success: true;
+  message?: string;
   data: T;
-  meta: ApiMeta;
+  meta?: ApiMeta;
 }
 
 /**

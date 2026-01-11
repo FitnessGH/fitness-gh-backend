@@ -1,31 +1,35 @@
-import type { Gender, User } from "@prisma/client";
+import type { Gender, Prisma, UserProfile } from "@prisma/client";
 
-export type CreateUserData = {
-  email: string;
+export type CreateProfileData = {
+  accountId: string;
   username: string;
   firstName?: string;
   lastName?: string;
+  avatarUrl?: string;
   height?: number;
   weight?: number;
   age?: number;
   gender?: Gender;
 };
 
-export type UpdateUserData = {
+export type UpdateProfileData = {
   firstName?: string;
   lastName?: string;
+  avatarUrl?: string;
   height?: number;
   weight?: number;
   age?: number;
   gender?: Gender;
+  preferences?: Prisma.InputJsonValue;
 };
 
-export type UserResponse = {
+export type ProfileResponse = {
   id: string;
-  email: string;
+  accountId: string;
   username: string;
   firstName: string | null;
   lastName: string | null;
+  avatarUrl: string | null;
   createdAt: Date;
   height: number | null;
   weight: number | null;
@@ -33,9 +37,9 @@ export type UserResponse = {
   gender: Gender | null;
 };
 
-export type UserStatsResponse = {
-  totalUsers: number;
+export type ProfileStatsResponse = {
+  totalProfiles: number;
   timestamp: string;
 };
 
-export type { User };
+export type { UserProfile };

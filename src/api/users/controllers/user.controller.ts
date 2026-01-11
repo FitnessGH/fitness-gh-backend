@@ -2,11 +2,10 @@ import type { Request, Response } from "express";
 
 import { z } from "zod";
 
-import type { UserStatsResponse } from "../types/user.types.js";
+import type { ProfileStatsResponse } from "../types/user.types.js";
 
 import UserService from "../services/user.service.js";
 import {
-  createUserSchema,
   searchUserSchema,
   updateUserSchema,
   userIdSchema,
@@ -15,38 +14,38 @@ import { error, success } from "@/utils/response.util.js";
 
 class UserController {
   /**
-   * Get all users
+   * Get all profiles
    */
   static async getUsers(req: Request, res: Response): Promise<void> {
     try {
-      const users = await UserService.getAllUsers();
-      res.json(success(users));
+      const profiles = await UserService.getAllProfiles();
+      res.json(success(profiles));
     }
     catch (err) {
-      console.error("Error fetching users:", err);
-      res.status(500).json(error("Failed to fetch users", 500, null, null));
+      console.error("Error fetching profiles:", err);
+      res.status(500).json(error("Failed to fetch profiles", 500, null, null));
     }
   }
 
   /**
-   * Get user by ID
+   * Get profile by ID
    */
   static async getUserById(req: Request, res: Response): Promise<void> {
     try {
       // Validate request parameters
       const { id } = userIdSchema.parse(req.params);
 
-      const user = await UserService.getUserById(id);
+      const profile = await UserService.getProfileById(id);
 
-      if (!user) {
-        res.status(404).json(error("User not found", 404, null, null));
+      if (!profile) {
+        res.status(404).json(error("Profile not found", 404, null, null));
         return;
       }
 
-      res.json(success(user));
+      res.json(success(profile));
     }
     catch (err) {
-      console.error("Error fetching user:", err);
+      console.error("Error fetching profile:", err);
 
       if (err instanceof z.ZodError) {
         res.status(400).json(error(
@@ -58,62 +57,25 @@ class UserController {
         return;
       }
 
-      res.status(500).json(error("Failed to fetch user", 500, null, null));
+      res.status(500).json(error("Failed to fetch profile", 500, null, null));
     }
   }
 
   /**
-   * Create a new user
-   */
-  static async createUser(req: Request, res: Response): Promise<void> {
-    try {
-      // Validate request body
-      const userData = createUserSchema.parse(req.body);
-
-      const user = await UserService.createUser(userData);
-
-      res.status(201).json(success(user));
-    }
-    catch (err) {
-      console.error("Error creating user:", err);
-
-      if (err instanceof z.ZodError) {
-        res.status(400).json(error(
-          "Invalid request data",
-          400,
-          err.errors,
-          null,
-        ));
-        return;
-      }
-
-      // Handle business logic errors with specific status codes
-      if (err instanceof Error) {
-        if (err.message.includes("already exists")) {
-          res.status(409).json(error(err.message, 409, null, null));
-          return;
-        }
-      }
-
-      res.status(500).json(error("Failed to create user", 500, null, null));
-    }
-  }
-
-  /**
-   * Update user
+   * Update profile
    */
   static async updateUser(req: Request, res: Response): Promise<void> {
     try {
       // Validate request parameters and body
       const { id } = userIdSchema.parse(req.params);
-      const userData = updateUserSchema.parse(req.body);
+      const profileData = updateUserSchema.parse(req.body);
 
-      const user = await UserService.updateUser(id, userData);
+      const profile = await UserService.updateProfile(id, profileData);
 
-      res.json(success(user));
+      res.json(success(profile));
     }
     catch (err) {
-      console.error("Error updating user:", err);
+      console.error("Error updating profile:", err);
 
       if (err instanceof z.ZodError) {
         res.status(400).json(error(
@@ -126,28 +88,28 @@ class UserController {
       }
 
       // Handle business logic errors with specific status codes
-      if (err instanceof Error && err.message === "User not found") {
+      if (err instanceof Error && err.message === "Profile not found") {
         res.status(404).json(error(err.message, 404, null, null));
         return;
       }
 
-      res.status(500).json(error("Failed to update user", 500, null, null));
+      res.status(500).json(error("Failed to update profile", 500, null, null));
     }
   }
 
   /**
-   * Delete user
+   * Delete profile
    */
   static async deleteUser(req: Request, res: Response): Promise<void> {
     try {
       // Validate request parameters
       const { id } = userIdSchema.parse(req.params);
 
-      await UserService.deleteUser(id);
+      await UserService.deleteProfile(id);
       res.status(204).send();
     }
     catch (err) {
-      console.error("Error deleting user:", err);
+      console.error("Error deleting profile:", err);
 
       if (err instanceof z.ZodError) {
         res.status(400).json(error(
@@ -160,28 +122,28 @@ class UserController {
       }
 
       // Handle business logic errors with specific status codes
-      if (err instanceof Error && err.message === "User not found") {
+      if (err instanceof Error && err.message === "Profile not found") {
         res.status(404).json(error(err.message, 404, null, null));
         return;
       }
 
-      res.status(500).json(error("Failed to delete user", 500, null, null));
+      res.status(500).json(error("Failed to delete profile", 500, null, null));
     }
   }
 
   /**
-   * Search users
+   * Search profiles
    */
   static async searchUsers(req: Request, res: Response): Promise<void> {
     try {
       // Validate query parameters
       const { q } = searchUserSchema.parse(req.query);
 
-      const users = await UserService.searchUsers(q);
-      res.json(success(users));
+      const profiles = await UserService.searchProfiles(q);
+      res.json(success(profiles));
     }
     catch (err) {
-      console.error("Error searching users:", err);
+      console.error("Error searching profiles:", err);
 
       if (err instanceof z.ZodError) {
         res.status(400).json(error(
@@ -193,27 +155,27 @@ class UserController {
         return;
       }
 
-      res.status(500).json(error("Failed to search users", 500, null, null));
+      res.status(500).json(error("Failed to search profiles", 500, null, null));
     }
   }
 
   /**
-   * Get user statistics
+   * Get profile statistics
    */
   static async getUserStats(req: Request, res: Response): Promise<void> {
     try {
-      const totalUsers = await UserService.getUserCount();
+      const totalProfiles = await UserService.getProfileCount();
 
-      const stats: UserStatsResponse = {
-        totalUsers,
+      const stats: ProfileStatsResponse = {
+        totalProfiles,
         timestamp: new Date().toISOString(),
       };
 
       res.json(success(stats));
     }
     catch (err) {
-      console.error("Error fetching user stats:", err);
-      res.status(500).json(error("Failed to fetch user statistics", 500, null, null));
+      console.error("Error fetching profile stats:", err);
+      res.status(500).json(error("Failed to fetch profile statistics", 500, null, null));
     }
   }
 }

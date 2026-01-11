@@ -9,15 +9,14 @@ export { default as UserService } from "./services/user.service.js";
 
 // Export types for external use
 export type {
-  CreateUserData,
-  UpdateUserData,
-  UserResponse,
-  UserStatsResponse,
+  CreateProfileData,
+  ProfileResponse,
+  ProfileStatsResponse,
+  UpdateProfileData,
 } from "./types/user.types.js";
 
 // Export validation schemas for external use
 export {
-  createUserSchema,
   searchUserSchema,
   updateUserSchema,
   userIdSchema,

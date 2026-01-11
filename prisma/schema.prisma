@@ -13,26 +13,166 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// User model
-model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  username  String   @unique
-  firstName String?
-  lastName  String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+// ============================================
+// ACCOUNT - Authentication & Identity
+// ============================================
+model Account {
+  id            String    @id @default(cuid())
+  
+  // Credentials
+  email         String    @unique
+  passwordHash  String
+  phone         String?   @unique
+  
+  // Verification status
+  emailVerified Boolean   @default(false)
+  phoneVerified Boolean   @default(false)
+  
+  // Account type & status
+  userType      UserType  @default(MEMBER)
+  isActive      Boolean   @default(true)
+  
+  // Timestamps
+  lastLoginAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // 1:1 Profile relation
+  profile       UserProfile?
+  
+  // Auth relations
+  refreshTokens RefreshToken[]
+  
+  @@map("accounts")
+}
 
-  // Fitness related fields
-  height   Float? // in cm
-  weight   Float? // in kg
-  age      Int?
-  gender   Gender?
+enum UserType {
+  SUPER_ADMIN   // Platform admin
+  GYM_OWNER     // Owns gyms
+  EMPLOYEE      // Works at a gym
+  MEMBER        // Regular member
+}
 
+model RefreshToken {
+  id        String    @id @default(cuid())
+  token     String    @unique
+  accountId String
+  account   Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+  revokedAt DateTime?
+  
+  @@map("refresh_tokens")
+}
+
+// ============================================
+// USER PROFILE - Personal & Fitness Data
+// ============================================
+model UserProfile {
+  id          String   @id @default(cuid())
+  accountId   String   @unique
+  account     Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  
+  // Identity
+  username    String   @unique
+  firstName   String?
+  lastName    String?
+  avatarUrl   String?
+  
+  // Fitness data (for members)
+  height      Float?   // in cm
+  weight      Float?   // in kg
+  age         Int?
+  gender      Gender?
+  
+  // Preferences
+  preferences Json?    // Notification prefs, display settings, etc.
+  
+  // Timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
   // Relations
-  // Removed workout, exercise, and progress log relations
+  ownedGyms   Gym[]        @relation("GymOwner")
+  employments Employment[]
+  
+  @@map("user_profiles")
+}
 
-  @@map("users")
+// ============================================
+// GYM - Gym Entity
+// ============================================
+model Gym {
+  id          String      @id @default(cuid())
+  name        String
+  slug        String      @unique
+  description String?
+  
+  // Location
+  address     String
+  city        String
+  region      String
+  country     String      @default("Ghana")
+  latitude    Float?
+  longitude   Float?
+  
+  // Contact
+  phone       String?
+  email       String?
+  website     String?
+  
+  // Branding
+  logoUrl     String?
+  coverUrl    String?
+  
+  // Operating hours (JSON object like { monday: { open: "06:00", close: "22:00" }, ... })
+  operatingHours Json?
+  
+  // Settings
+  isActive    Boolean     @default(true)
+  settings    Json?       // Flexible settings object
+  
+  // Ownership (references UserProfile)
+  ownerId     String
+  owner       UserProfile @relation("GymOwner", fields: [ownerId], references: [id])
+  
+  // Timestamps
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  
+  // Relations
+  employees   Employment[]
+  
+  @@map("gyms")
+}
+
+// ============================================
+// EMPLOYMENT - Links employees to gyms with roles
+// ============================================
+model Employment {
+  id        String         @id @default(cuid())
+  profileId String
+  profile   UserProfile    @relation(fields: [profileId], references: [id])
+  gymId     String
+  gym       Gym            @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  
+  role      EmployeeRole
+  isActive  Boolean        @default(true)
+  startDate DateTime       @default(now())
+  endDate   DateTime?
+  
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  
+  @@unique([profileId, gymId])
+  @@map("employments")
+}
+
+enum EmployeeRole {
+  MANAGER       // Full access, can manage other employees
+  TRAINER       // Can manage members, workouts
+  RECEPTIONIST  // Check-ins, basic member management
+  STAFF         // Minimal access
 }
 
 // Enums

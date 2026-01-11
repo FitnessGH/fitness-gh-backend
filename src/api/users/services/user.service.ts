@@ -1,120 +1,101 @@
-import type { User } from "@prisma/client";
+import type { UserProfile } from "@prisma/client";
 
 import { prisma } from "@/core/services/prisma.service.js";
 
-import type { CreateUserData, UpdateUserData, UserResponse } from "../types/user.types.js";
+import type { CreateProfileData, UpdateProfileData, ProfileResponse } from "../types/user.types.js";
 
 class UserService {
   /**
-   * Get all users with selected fields
+   * Get all user profiles with selected fields
    */
-  static async getAllUsers(): Promise<UserResponse[]> {
-    return await prisma.user.findMany({
+  static async getAllProfiles(): Promise<ProfileResponse[]> {
+    return await prisma.userProfile.findMany({
       select: {
         id: true,
-        email: true,
+        accountId: true,
         username: true,
         firstName: true,
         lastName: true,
-        createdAt: true,
+        avatarUrl: true,
         height: true,
         weight: true,
         age: true,
         gender: true,
+        createdAt: true,
       },
     });
   }
 
   /**
-   * Get user by ID
+   * Get profile by ID
    */
-  static async getUserById(id: string): Promise<User | null> {
-    return await prisma.user.findUnique({
+  static async getProfileById(id: string): Promise<UserProfile | null> {
+    return await prisma.userProfile.findUnique({
       where: { id },
     });
   }
 
   /**
-   * Check if user exists by email
+   * Get profile by account ID
    */
-  static async getUserByEmail(email: string): Promise<User | null> {
-    return await prisma.user.findUnique({
-      where: { email },
+  static async getProfileByAccountId(accountId: string): Promise<UserProfile | null> {
+    return await prisma.userProfile.findUnique({
+      where: { accountId },
     });
   }
 
   /**
-   * Check if user exists by username
+   * Get profile by username
    */
-  static async getUserByUsername(username: string): Promise<User | null> {
-    return await prisma.user.findUnique({
+  static async getProfileByUsername(username: string): Promise<UserProfile | null> {
+    return await prisma.userProfile.findUnique({
       where: { username },
     });
   }
 
   /**
-   * Create a new user
+   * Update profile by ID
    */
-  static async createUser(userData: CreateUserData): Promise<User> {
-    // Business logic: Validate unique constraints
-    const existingUserByEmail = await this.getUserByEmail(userData.email);
-    if (existingUserByEmail) {
-      throw new Error("A user with this email already exists");
+  static async updateProfile(id: string, profileData: UpdateProfileData): Promise<UserProfile> {
+    // Business logic: Check if profile exists
+    const existingProfile = await this.getProfileById(id);
+    if (!existingProfile) {
+      throw new Error("Profile not found");
     }
 
-    const existingUserByUsername = await this.getUserByUsername(userData.username);
-    if (existingUserByUsername) {
-      throw new Error("A user with this username already exists");
-    }
-
-    return await prisma.user.create({
-      data: userData,
-    });
-  }
-
-  /**
-   * Update user by ID
-   */
-  static async updateUser(id: string, userData: UpdateUserData): Promise<User> {
-    // Business logic: Check if user exists
-    const existingUser = await this.getUserById(id);
-    if (!existingUser) {
-      throw new Error("User not found");
-    }
-
-    return await prisma.user.update({
+    return await prisma.userProfile.update({
       where: { id },
-      data: userData,
+      data: profileData,
     });
   }
 
   /**
-   * Delete user by ID
+   * Delete profile by ID (cascades from account deletion)
    */
-  static async deleteUser(id: string): Promise<void> {
-    // Business logic: Check if user exists
-    const existingUser = await this.getUserById(id);
-    if (!existingUser) {
-      throw new Error("User not found");
+  static async deleteProfile(id: string): Promise<void> {
+    // Business logic: Check if profile exists
+    const existingProfile = await this.getProfileById(id);
+    if (!existingProfile) {
+      throw new Error("Profile not found");
     }
 
-    await prisma.user.delete({
+    await prisma.userProfile.delete({
       where: { id },
     });
   }
 
   /**
-   * Get user count (for analytics/admin purposes)
+   * Get profile count (for analytics/admin purposes)
    */
-  static async getUserCount(): Promise<number> {
-    return await prisma.user.count();
+  static async getProfileCount(): Promise<number> {
+    return await prisma.userProfile.count();
   }
 
   /**
-   * Search users by name or username
+   * Search profiles by name or username
    */
-  static async searchUsers(query: string): Promise<UserResponse[]> {
-    return await prisma.user.findMany({
+  static async searchProfiles(query: string): Promise<ProfileResponse[]> {
+    return await prisma.userProfile.findMany({
       where: {
         OR: [
           { firstName: { contains: query, mode: "insensitive" } },
@@ -124,15 +105,16 @@ class UserService {
       },
       select: {
         id: true,
-        email: true,
+        accountId: true,
         username: true,
         firstName: true,
         lastName: true,
-        createdAt: true,
+        avatarUrl: true,
         height: true,
         weight: true,
         age: true,
         gender: true,
+        createdAt: true,
       },
     });
   }
