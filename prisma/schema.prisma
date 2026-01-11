@@ -95,6 +95,7 @@ model UserProfile {
   // Relations
   ownedGyms   Gym[]        @relation("GymOwner")
   employments Employment[]
+  memberships Membership[]
   
   @@map("user_profiles")
 }
@@ -141,7 +142,9 @@ model Gym {
   updatedAt   DateTime    @updatedAt
   
   // Relations
-  employees   Employment[]
+  employees         Employment[]
+  subscriptionPlans SubscriptionPlan[]
+  memberships       Membership[]
   
   @@map("gyms")
 }
@@ -173,6 +176,97 @@ enum EmployeeRole {
   TRAINER       // Can manage members, workouts
   RECEPTIONIST  // Check-ins, basic member management
   STAFF         // Minimal access
+}
+
+// ============================================
+// SUBSCRIPTION PLAN - Gym-defined membership plans
+// ============================================
+model SubscriptionPlan {
+  id          String           @id @default(cuid())
+  gymId       String
+  gym         Gym              @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  
+  name        String           // e.g., "Basic", "Premium", "VIP"
+  description String?
+  
+  // Pricing
+  price       Float            // Amount in GHS
+  currency    String           @default("GHS")
+  
+  // Duration
+  duration    Int              // Duration value
+  durationUnit DurationUnit    // DAYS, WEEKS, MONTHS, YEARS
+  
+  // Features and limits
+  features    Json?            // Array of features included
+  maxVisits   Int?             // null = unlimited
+  
+  // Status
+  isActive    Boolean          @default(true)
+  sortOrder   Int              @default(0)  // For display ordering
+  
+  // Timestamps
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  
+  // Relations
+  memberships Membership[]
+  
+  @@map("subscription_plans")
+}
+
+enum DurationUnit {
+  DAYS
+  WEEKS
+  MONTHS
+  YEARS
+}
+
+// ============================================
+// MEMBERSHIP - User's subscription to a gym plan
+// ============================================
+model Membership {
+  id              String           @id @default(cuid())
+  
+  // Links
+  profileId       String
+  profile         UserProfile      @relation(fields: [profileId], references: [id])
+  gymId           String
+  gym             Gym              @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  planId          String
+  plan            SubscriptionPlan @relation(fields: [planId], references: [id])
+  
+  // Status
+  status          MembershipStatus @default(PENDING)
+  
+  // Dates
+  startDate       DateTime?
+  endDate         DateTime?
+  
+  // Auto-renewal
+  autoRenew       Boolean          @default(false)
+  
+  // Visit tracking (if plan has maxVisits)
+  visitsUsed      Int              @default(0)
+  
+  // Payment reference (for Phase 4)
+  lastPaymentId   String?
+  
+  // Timestamps
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  cancelledAt     DateTime?
+  
+  @@unique([profileId, gymId, planId])
+  @@map("memberships")
+}
+
+enum MembershipStatus {
+  PENDING     // Awaiting payment
+  ACTIVE      // Currently active
+  EXPIRED     // Past end date
+  CANCELLED   // Cancelled by user
+  SUSPENDED   // Suspended by gym
 }
 
 // Enums

@@ -1,4 +1,4 @@
-import type { Account, UserProfile, UserType } from "@prisma/client";
+import type { Account, UserProfile } from "@prisma/client";
 
 import bcrypt from "bcrypt";
 
@@ -265,7 +265,6 @@ class AuthService {
   }
 
   private sanitizeAccount(account: Account): SafeAccount {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { passwordHash, ...safeAccount } = account;
     return safeAccount;
   }
