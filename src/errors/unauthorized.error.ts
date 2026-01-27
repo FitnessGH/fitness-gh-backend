@@ -3,10 +3,10 @@ import { CustomError } from "@/errors/custom.error";
 export class UnauthorizedError extends CustomError {
   constructor({
     message,
-        status = 401,
-        success = false,
-        data = null,
-        details = null,
+    status = 401,
+    success = false,
+    data = null,
+    details = null,
   }: {
     message: string;
     status?: number;

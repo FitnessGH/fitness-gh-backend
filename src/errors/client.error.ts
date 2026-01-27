@@ -13,10 +13,10 @@ export class ClientError extends CustomError {
    */
   constructor({
     message,
-        status = 400,
-        success = false,
-        data = null,
-        details = null,
+    status = 400,
+    success = false,
+    data = null,
+    details = null,
   }: {
     message: string;
     status?: number;

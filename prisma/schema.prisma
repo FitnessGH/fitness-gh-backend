@@ -1,0 +1,323 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// ACCOUNT - Authentication & Identity
+// ============================================
+model Account {
+  id            String    @id @default(cuid())
+  
+  // Credentials
+  email         String    @unique
+  passwordHash  String
+  phone         String?   @unique
+  
+  // Verification status
+  emailVerified Boolean   @default(false)
+  phoneVerified Boolean   @default(false)
+  
+  // Account type & status
+  userType      UserType  @default(MEMBER)
+  isActive      Boolean   @default(true)
+  
+  // Timestamps
+  lastLoginAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // 1:1 Profile relation
+  profile       UserProfile?
+  
+  // Auth relations
+  refreshTokens RefreshToken[]
+  
+  @@map("accounts")
+}
+
+enum UserType {
+  SUPER_ADMIN   // Platform admin
+  GYM_OWNER     // Owns gyms
+  EMPLOYEE      // Works at a gym
+  MEMBER        // Regular member
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  token     String    @unique
+  accountId String
+  account   Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+  revokedAt DateTime?
+  
+  @@map("refresh_tokens")
+}
+
+// ============================================
+// USER PROFILE - Personal & Fitness Data
+// ============================================
+model UserProfile {
+  id          String   @id @default(cuid())
+  accountId   String   @unique
+  account     Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  
+  // Identity
+  username    String   @unique
+  firstName   String?
+  lastName    String?
+  avatarUrl   String?
+  
+  // Fitness data (for members)
+  height      Float?   // in cm
+  weight      Float?   // in kg
+  age         Int?
+  gender      Gender?
+  
+  // Preferences
+  preferences Json?    // Notification prefs, display settings, etc.
+  
+  // Timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relations
+  ownedGyms   Gym[]        @relation("GymOwner")
+  employments Employment[]
+  memberships Membership[]
+  payments    Payment[]
+  
+  @@map("user_profiles")
+}
+
+// ============================================
+// GYM - Gym Entity
+// ============================================
+model Gym {
+  id          String      @id @default(cuid())
+  name        String
+  slug        String      @unique
+  description String?
+  
+  // Location
+  address     String
+  city        String
+  region      String
+  country     String      @default("Ghana")
+  latitude    Float?
+  longitude   Float?
+  
+  // Contact
+  phone       String?
+  email       String?
+  website     String?
+  
+  // Branding
+  logoUrl     String?
+  coverUrl    String?
+  
+  // Operating hours (JSON object like { monday: { open: "06:00", close: "22:00" }, ... })
+  operatingHours Json?
+  
+  // Settings
+  isActive    Boolean     @default(true)
+  settings    Json?       // Flexible settings object
+  
+  // Ownership (references UserProfile)
+  ownerId     String
+  owner       UserProfile @relation("GymOwner", fields: [ownerId], references: [id])
+  
+  // Timestamps
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  
+  // Relations
+  employees         Employment[]
+  subscriptionPlans SubscriptionPlan[]
+  memberships       Membership[]
+  payments          Payment[]
+  
+  @@map("gyms")
+}
+
+// ============================================
+// EMPLOYMENT - Links employees to gyms with roles
+// ============================================
+model Employment {
+  id        String         @id @default(cuid())
+  profileId String
+  profile   UserProfile    @relation(fields: [profileId], references: [id])
+  gymId     String
+  gym       Gym            @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  
+  role      EmployeeRole
+  isActive  Boolean        @default(true)
+  startDate DateTime       @default(now())
+  endDate   DateTime?
+  
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  
+  @@unique([profileId, gymId])
+  @@map("employments")
+}
+
+enum EmployeeRole {
+  MANAGER       // Full access, can manage other employees
+  TRAINER       // Can manage members, workouts
+  RECEPTIONIST  // Check-ins, basic member management
+  STAFF         // Minimal access
+}
+
+// ============================================
+// SUBSCRIPTION PLAN - Gym-defined membership plans
+// ============================================
+model SubscriptionPlan {
+  id          String           @id @default(cuid())
+  gymId       String
+  gym         Gym              @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  
+  name        String           // e.g., "Basic", "Premium", "VIP"
+  description String?
+  
+  // Pricing
+  price       Float            // Amount in GHS
+  currency    String           @default("GHS")
+  
+  // Duration
+  duration    Int              // Duration value
+  durationUnit DurationUnit    // DAYS, WEEKS, MONTHS, YEARS
+  
+  // Features and limits
+  features    Json?            // Array of features included
+  maxVisits   Int?             // null = unlimited
+  
+  // Status
+  isActive    Boolean          @default(true)
+  sortOrder   Int              @default(0)  // For display ordering
+  
+  // Timestamps
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  
+  // Relations
+  memberships Membership[]
+  
+  @@map("subscription_plans")
+}
+
+enum DurationUnit {
+  DAYS
+  WEEKS
+  MONTHS
+  YEARS
+}
+
+// ============================================
+// MEMBERSHIP - User's subscription to a gym plan
+// ============================================
+model Membership {
+  id              String           @id @default(cuid())
+  
+  // Links
+  profileId       String
+  profile         UserProfile      @relation(fields: [profileId], references: [id])
+  gymId           String
+  gym             Gym              @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  planId          String
+  plan            SubscriptionPlan @relation(fields: [planId], references: [id])
+  
+  // Status
+  status          MembershipStatus @default(PENDING)
+  
+  // Dates
+  startDate       DateTime?
+  endDate         DateTime?
+  
+  // Auto-renewal
+  autoRenew       Boolean          @default(false)
+  
+  // Visit tracking (if plan has maxVisits)
+  visitsUsed      Int              @default(0)
+  
+  // Payment reference (for Phase 4)
+  lastPaymentId   String?
+  
+  // Timestamps
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  cancelledAt     DateTime?
+  
+  // Relations
+  payments        Payment[]
+  
+  @@unique([profileId, gymId, planId])
+  @@map("memberships")
+}
+
+enum MembershipStatus {
+  PENDING     // Awaiting payment
+  ACTIVE      // Currently active
+  EXPIRED     // Past end date
+  CANCELLED   // Cancelled by user
+  SUSPENDED   // Suspended by gym
+}
+
+// ============================================
+// PAYMENT - Transaction records
+// ============================================
+model Payment {
+  id              String           @id @default(cuid())
+  
+  // Links
+  profileId       String
+  profile         UserProfile      @relation(fields: [profileId], references: [id])
+  gymId           String
+  gym             Gym              @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  
+  // Context
+  membershipId    String?
+  membership      Membership?      @relation(fields: [membershipId], references: [id])
+  
+  // Payment Details
+  amount          Float
+  currency        String           @default("GHS")
+  reference       String           @unique // Payment provider reference
+  provider        String           // e.g., "PAYSTACK", "STRIPE", "SIMULATOR"
+  channel         String?          // e.g., "card", "mobile_money"
+  
+  // Status
+  status          PaymentStatus    @default(PENDING)
+  
+  // Timestamps
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  paidAt          DateTime?
+  
+  @@map("payments")
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+// Enums
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}

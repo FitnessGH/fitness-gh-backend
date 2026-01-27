@@ -3,20 +3,31 @@
     "target": "esnext",
     "lib": ["ESNext"],
     "baseUrl": "./src",
+    "rootDir": "./src",
     "module": "esnext",
     "moduleResolution": "bundler",
     "paths": {
-      "@/*": ["*"]
+      "@/*": ["*"],
+      "@/config/*": ["config/*"],
+      "@/types/*": ["types/*"],
+      "@/utils/*": ["utils/*"],
+      "@/middlewares/*": ["middlewares/*"],
+      "@/routes/*": ["routes/*"],
+      "@/controllers/*": ["controllers/*"],
+      "@/services/*": ["services/*"],
+      "@/models/*": ["models/*"],
+      "@/core/*": ["core/*"],
+      "@/api/*": ["api/*"],
+      "@/errors/*": ["errors/*"],
+      "@root/*": ["../*"]
     },
     "resolveJsonModule": true,
     "types": [
       "node"
     ],
-    "allowImportingTsExtensions": true,
     "strict": true,
     "noImplicitAny": true,
     "declaration": true,
-    "noEmit": true,
     "outDir": "./dist",
     "sourceMap": true,
     "allowSyntheticDefaultImports": true,
@@ -27,7 +38,7 @@
   "include": [
     "src/**/*",
     "../test/**/*"
-  ],
+, "src/config/prisma.config.ts"  ],
   "exclude": [
     "node_modules",
     "dist",

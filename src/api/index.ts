@@ -1,15 +1,20 @@
-import { Router } from "express";
+import { BaseRoute } from "@/core/base-route";
 
-import type MessageResponse from "@/types/message-response.type";
+import { authRoute } from "./auth/index.js";
+import { gymRoute } from "./gyms/index.js";
+import { paymentRoute } from "./payments/index.js";
+import { subscriptionRoute } from "./subscriptions/index.js";
+import { userRoute } from "./users/index.js";
 
-const router: Router = Router();
+class ApiRoute extends BaseRoute {
+  protected initializeRoutes(): void {
+    // Mount sub-routes
+    this.router.use("/auth", authRoute);
+    this.router.use("/gyms", gymRoute);
+    this.router.use("/payments", paymentRoute);
+    this.router.use("/subscriptions", subscriptionRoute);
+    this.router.use("/users", userRoute);
+  }
+}
 
-router.get<object, MessageResponse>("/", (req, res) => {
-  res.json({
-    message: "Welcome to Fitness GH Backend API - 🚀",
-  });
-});
-
-
-
-export default router;
+export default new ApiRoute().getRouter();

@@ -73,3 +73,6 @@ typings/
 .serverless
 
 dist
+
+examples
+/src/generated/prisma

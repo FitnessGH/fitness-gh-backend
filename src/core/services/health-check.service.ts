@@ -1,14 +1,19 @@
+import PrismaService from "@/core/services/prisma.service";
+
 class HealthCheckService {
   static async checkServiceHealth() {
     const timestamp = new Date().toISOString();
 
     try {
+      // Check database connectivity
+      const isDatabaseHealthy = await PrismaService.healthCheck();
+
       return {
-        status: "Healthy",
+        status: isDatabaseHealthy ? "Healthy" : "Degraded",
         timestamp,
         details: {
           service: "up",
-        //   database: "Connection has been established successfully.",
+          database: isDatabaseHealthy ? "Connected" : "Connection failed",
         },
       };
     }
@@ -20,7 +25,7 @@ class HealthCheckService {
         timestamp,
         details: {
           service: "down",
-        //   database: "Unable to connect to the database.",
+          database: "Unable to connect to the database.",
         },
       };
       throw serviceDownError;

@@ -17,10 +17,10 @@ export class ForbiddenError extends CustomError {
    */
   constructor({
     message,
-        status = 403,
-        success = false,
-        data = null,
-        details = null,
+    status = 403,
+    success = false,
+    data = null,
+    details = null,
   }: {
     message: string;
     status?: number;

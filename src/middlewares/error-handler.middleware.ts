@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
+import { ZodError } from "zod";
 
 import type { ResponseError } from "@/errors";
 
@@ -11,6 +12,16 @@ export function errorHandler(
   _next: NextFunction,
 ): void {
   console.error(err);
+  if (err instanceof ZodError) {
+    res.status(400).json({
+      status: 400,
+      message: "Validation Error",
+      success: false,
+      errors: err.errors,
+    });
+    return;
+  }
+
   if (
     !(err instanceof CustomError)
   // &&
