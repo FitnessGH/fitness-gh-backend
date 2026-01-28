@@ -1,5 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 
+import { parse } from "valibot";
+
 import type { ApiResponse } from "@/types";
 import type { AuthenticatedRequest } from "@/middlewares/auth.middleware";
 import { ForbiddenError, NotFoundError } from "@/errors";
@@ -39,8 +41,8 @@ class SubscriptionController {
         throw new ForbiddenError({ message: "Profile not found" });
       }
 
-      const { id: gymId } = gymIdSchema.parse(req.params);
-      const validatedData = createPlanSchema.parse(req.body);
+      const { id: gymId } = parse(gymIdSchema, req.params);
+      const validatedData = parse(createPlanSchema, req.body);
 
       // Check access (owner or manager)
       await GymService.checkGymAccess(gymId, profileId, ["MANAGER"]);
@@ -68,7 +70,7 @@ class SubscriptionController {
     next: NextFunction,
   ): Promise<void> {
     try {
-      const { id: gymId } = gymIdSchema.parse(req.params);
+      const { id: gymId } = parse(gymIdSchema, req.params);
 
       // Show only active plans for public view
       const plans = await SubscriptionService.getGymPlans(gymId, { activeOnly: true });
@@ -93,7 +95,7 @@ class SubscriptionController {
     next: NextFunction,
   ): Promise<void> {
     try {
-      const { planId } = planIdSchema.parse(req.params);
+      const { planId } = parse(planIdSchema, req.params);
       const plan = await SubscriptionService.getPlanById(planId);
 
       if (!plan) {
@@ -127,9 +129,9 @@ class SubscriptionController {
         throw new ForbiddenError({ message: "Profile not found" });
       }
 
-      const { id: gymId } = gymIdSchema.parse(req.params);
-      const { planId } = planIdSchema.parse(req.params);
-      const validatedData = updatePlanSchema.parse(req.body);
+      const { id: gymId } = parse(gymIdSchema, req.params);
+      const { planId } = parse(planIdSchema, req.params);
+      const validatedData = parse(updatePlanSchema, req.body);
 
       // Check access (owner or manager)
       await GymService.checkGymAccess(gymId, profileId, ["MANAGER"]);
@@ -164,8 +166,8 @@ class SubscriptionController {
         throw new ForbiddenError({ message: "Profile not found" });
       }
 
-      const { id: gymId } = gymIdSchema.parse(req.params);
-      const { planId } = planIdSchema.parse(req.params);
+      const { id: gymId } = parse(gymIdSchema, req.params);
+      const { planId } = parse(planIdSchema, req.params);
 
       // Check access (owner or manager)
       await GymService.checkGymAccess(gymId, profileId, ["MANAGER"]);
@@ -204,8 +206,8 @@ class SubscriptionController {
         throw new ForbiddenError({ message: "Profile not found" });
       }
 
-      const { id: gymId } = gymIdSchema.parse(req.params);
-      const { email, planId, startDate, autoRenew } = createMembershipByStaffSchema.parse(req.body);
+      const { id: gymId } = parse(gymIdSchema, req.params);
+      const { email, planId, startDate, autoRenew } = parse(createMembershipByStaffSchema, req.body);
 
       // Check access (owner, manager, or receptionist)
       await GymService.checkGymAccess(gymId, profileId, ["MANAGER", "RECEPTIONIST"]);
@@ -245,8 +247,8 @@ class SubscriptionController {
         throw new ForbiddenError({ message: "Profile not found" });
       }
 
-      const { id: gymId } = gymIdSchema.parse(req.params);
-      const { planId, startDate, autoRenew } = createMembershipSchema.parse(req.body);
+      const { id: gymId } = parse(gymIdSchema, req.params);
+      const { planId, startDate, autoRenew } = parse(createMembershipSchema, req.body);
 
       const membership = await SubscriptionService.createMembership({
         profileId,
@@ -284,7 +286,7 @@ class SubscriptionController {
         throw new ForbiddenError({ message: "Profile not found" });
       }
 
-      const { id: gymId } = gymIdSchema.parse(req.params);
+      const { id: gymId } = parse(gymIdSchema, req.params);
 
       // Check access
       await GymService.checkGymAccess(gymId, profileId);
@@ -347,9 +349,9 @@ class SubscriptionController {
         throw new ForbiddenError({ message: "Profile not found" });
       }
 
-      const { id: gymId } = gymIdSchema.parse(req.params);
-      const { membershipId } = membershipIdSchema.parse(req.params);
-      const validatedData = updateMembershipSchema.parse(req.body);
+      const { id: gymId } = parse(gymIdSchema, req.params);
+      const { membershipId } = parse(membershipIdSchema, req.params);
+      const validatedData = parse(updateMembershipSchema, req.body);
 
       // Check access (owner, manager, or receptionist)
       await GymService.checkGymAccess(gymId, profileId, ["MANAGER", "RECEPTIONIST"]);
@@ -384,8 +386,8 @@ class SubscriptionController {
         throw new ForbiddenError({ message: "Profile not found" });
       }
 
-      const { id: gymId } = gymIdSchema.parse(req.params);
-      const { membershipId } = membershipIdSchema.parse(req.params);
+      const { id: gymId } = parse(gymIdSchema, req.params);
+      const { membershipId } = parse(membershipIdSchema, req.params);
 
       // Check access (owner, manager, or receptionist)
       await GymService.checkGymAccess(gymId, profileId, ["MANAGER", "RECEPTIONIST"]);
@@ -420,8 +422,8 @@ class SubscriptionController {
         throw new ForbiddenError({ message: "Profile not found" });
       }
 
-      const { id: gymId } = gymIdSchema.parse(req.params);
-      const { membershipId } = membershipIdSchema.parse(req.params);
+      const { id: gymId } = parse(gymIdSchema, req.params);
+      const { membershipId } = parse(membershipIdSchema, req.params);
 
       // Check if user is cancelling their own membership or has staff access
       const membership = await SubscriptionService.getMembershipById(membershipId);

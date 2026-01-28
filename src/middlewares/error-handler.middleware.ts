@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
-import { ZodError } from "zod";
+import { ValiError } from "valibot";
 
 import type { ResponseError } from "@/errors";
 
@@ -12,12 +12,12 @@ export function errorHandler(
   _next: NextFunction,
 ): void {
   console.error(err);
-  if (err instanceof ZodError) {
+  if (err instanceof ValiError) {
     res.status(400).json({
       status: 400,
       message: "Validation Error",
       success: false,
-      errors: err.errors,
+      errors: err.issues,
     });
     return;
   }

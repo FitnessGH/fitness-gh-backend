@@ -1,5 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 
+import { parse } from "valibot";
+
 import type { ApiResponse } from "@/types";
 import type { AuthenticatedRequest } from "@/middlewares/auth.middleware";
 import { ForbiddenError, NotFoundError } from "@/errors";
@@ -37,7 +39,7 @@ class GymController {
         throw new ForbiddenError({ message: "Profile not found" });
       }
 
-      const validatedData = createGymSchema.parse(req.body);
+      const validatedData = parse(createGymSchema, req.body);
       const gym = await GymService.createGym(profileId, validatedData);
 
       res.status(201).json({
@@ -116,7 +118,7 @@ class GymController {
     next: NextFunction,
   ): Promise<void> {
     try {
-      const { slug } = gymSlugSchema.parse(req.params);
+      const { slug } = parse(gymSlugSchema, req.params);
       const gym = await GymService.getGymBySlug(slug);
 
       if (!gym) {
@@ -150,8 +152,8 @@ class GymController {
         throw new ForbiddenError({ message: "Profile not found" });
       }
 
-      const { id } = gymIdSchema.parse(req.params);
-      const validatedData = updateGymSchema.parse(req.body);
+      const { id } = parse(gymIdSchema, req.params);
+      const validatedData = parse(updateGymSchema, req.body);
 
       // Check access (owner or manager)
       await GymService.checkGymAccess(id, profileId, ["MANAGER"]);
@@ -186,7 +188,7 @@ class GymController {
         throw new ForbiddenError({ message: "Profile not found" });
       }
 
-      const { id } = gymIdSchema.parse(req.params);
+      const { id } = parse(gymIdSchema, req.params);
 
       // Check access (owner only)
       const { isOwner } = await GymService.checkGymAccess(id, profileId);
@@ -228,8 +230,8 @@ class GymController {
         throw new ForbiddenError({ message: "Profile not found" });
       }
 
-      const { id: gymId } = gymIdSchema.parse(req.params);
-      const { email, role } = addEmployeeSchema.parse(req.body);
+      const { id: gymId } = parse(gymIdSchema, req.params);
+      const { email, role } = parse(addEmployeeSchema, req.body);
 
       // Check access (owner or manager)
       await GymService.checkGymAccess(gymId, profileId, ["MANAGER"]);
@@ -264,7 +266,7 @@ class GymController {
         throw new ForbiddenError({ message: "Profile not found" });
       }
 
-      const { id: gymId } = gymIdSchema.parse(req.params);
+      const { id: gymId } = parse(gymIdSchema, req.params);
 
       // Check access (any employee role or owner)
       await GymService.checkGymAccess(gymId, profileId);
@@ -298,9 +300,9 @@ class GymController {
         throw new ForbiddenError({ message: "Profile not found" });
       }
 
-      const { id: gymId } = gymIdSchema.parse(req.params);
-      const { employeeId } = employeeIdSchema.parse(req.params);
-      const validatedData = updateEmployeeSchema.parse(req.body);
+      const { id: gymId } = parse(gymIdSchema, req.params);
+      const { employeeId } = parse(employeeIdSchema, req.params);
+      const validatedData = parse(updateEmployeeSchema, req.body);
 
       // Check access (owner or manager)
       await GymService.checkGymAccess(gymId, profileId, ["MANAGER"]);
@@ -335,8 +337,8 @@ class GymController {
         throw new ForbiddenError({ message: "Profile not found" });
       }
 
-      const { id: gymId } = gymIdSchema.parse(req.params);
-      const { employeeId } = employeeIdSchema.parse(req.params);
+      const { id: gymId } = parse(gymIdSchema, req.params);
+      const { employeeId } = parse(employeeIdSchema, req.params);
 
       // Check access (owner or manager)
       await GymService.checkGymAccess(gymId, profileId, ["MANAGER"]);

@@ -1,64 +1,122 @@
-import { z } from "zod";
+import {
+  array,
+  boolean,
+  email,
+  integer,
+  isoDateTime,
+  maxLength,
+  maxValue,
+  minLength,
+  minValue,
+  number,
+  object,
+  optional,
+  picklist,
+  pipe,
+  string,
+  transform,
+  type InferOutput,
+} from "valibot";
 
 // Duration unit enum
-const DurationUnitEnum = z.enum(["DAYS", "WEEKS", "MONTHS", "YEARS"]);
+const DurationUnitEnum = picklist(["DAYS", "WEEKS", "MONTHS", "YEARS"]);
 
 // Membership status enum
-const MembershipStatusEnum = z.enum(["PENDING", "ACTIVE", "EXPIRED", "CANCELLED", "SUSPENDED"]);
+const MembershipStatusEnum = picklist(["PENDING", "ACTIVE", "EXPIRED", "CANCELLED", "SUSPENDED"]);
 
 // ========================================
 // SUBSCRIPTION PLAN VALIDATIONS
 // ========================================
 
 // Create plan validation schema
-export const createPlanSchema = z.object({
-  name: z
-    .string()
-    .min(2, "Plan name must be at least 2 characters")
-    .max(100, "Plan name must not exceed 100 characters"),
-  description: z
-    .string()
-    .max(500, "Description must not exceed 500 characters")
-    .optional(),
-  price: z
-    .number()
-    .min(0, "Price cannot be negative")
-    .max(100000, "Price must not exceed 100,000"),
-  currency: z
-    .string()
-    .length(3, "Currency must be a 3-letter code")
-    .default("GHS"),
-  duration: z
-    .number()
-    .int("Duration must be a whole number")
-    .min(1, "Duration must be at least 1")
-    .max(365, "Duration must not exceed 365"),
+export const createPlanSchema = object({
+  name: pipe(
+    string(),
+    minLength(2, "Plan name must be at least 2 characters"),
+    maxLength(100, "Plan name must not exceed 100 characters"),
+  ),
+  description: optional(pipe(
+    string(),
+    maxLength(500, "Description must not exceed 500 characters"),
+  )),
+  price: pipe(
+    number(),
+    minValue(0, "Price cannot be negative"),
+    maxValue(100000, "Price must not exceed 100,000"),
+  ),
+  currency: optional(pipe(
+    string(),
+    minLength(3, "Currency must be a 3-letter code"),
+    maxLength(3, "Currency must be a 3-letter code"),
+  ), "GHS"),
+  duration: pipe(
+    number(),
+    integer("Duration must be a whole number"),
+    minValue(1, "Duration must be at least 1"),
+    maxValue(365, "Duration must not exceed 365"),
+  ),
   durationUnit: DurationUnitEnum,
-  features: z
-    .array(z.string())
-    .optional(),
-  maxVisits: z
-    .number()
-    .int("Max visits must be a whole number")
-    .min(1, "Max visits must be at least 1")
-    .optional(),
-  sortOrder: z
-    .number()
-    .int("Sort order must be a whole number")
-    .min(0)
-    .optional(),
+  features: optional(array(string())),
+  maxVisits: optional(pipe(
+    number(),
+    integer("Max visits must be a whole number"),
+    minValue(1, "Max visits must be at least 1"),
+  )),
+  sortOrder: optional(pipe(
+    number(),
+    integer("Sort order must be a whole number"),
+    minValue(0),
+  )),
 });
 
 // Update plan validation schema
-export const updatePlanSchema = createPlanSchema.partial().extend({
-  isActive: z.boolean().optional(),
+export const updatePlanSchema = object({
+  name: optional(pipe(
+    string(),
+    minLength(2, "Plan name must be at least 2 characters"),
+    maxLength(100, "Plan name must not exceed 100 characters"),
+  )),
+  description: optional(pipe(
+    string(),
+    maxLength(500, "Description must not exceed 500 characters"),
+  )),
+  price: optional(pipe(
+    number(),
+    minValue(0, "Price cannot be negative"),
+    maxValue(100000, "Price must not exceed 100,000"),
+  )),
+  currency: optional(pipe(
+    string(),
+    minLength(3, "Currency must be a 3-letter code"),
+    maxLength(3, "Currency must be a 3-letter code"),
+  )),
+  duration: optional(pipe(
+    number(),
+    integer("Duration must be a whole number"),
+    minValue(1, "Duration must be at least 1"),
+    maxValue(365, "Duration must not exceed 365"),
+  )),
+  durationUnit: optional(DurationUnitEnum),
+  features: optional(array(string())),
+  maxVisits: optional(pipe(
+    number(),
+    integer("Max visits must be a whole number"),
+    minValue(1, "Max visits must be at least 1"),
+  )),
+  sortOrder: optional(pipe(
+    number(),
+    integer("Sort order must be a whole number"),
+    minValue(0),
+  )),
+  isActive: optional(boolean()),
 });
 
 // Plan ID validation
-export const planIdSchema = z.object({
-  planId: z
-    .string()
-    .min(1, "Plan ID is required"),
+export const planIdSchema = object({
+  planId: pipe(
+    string(),
+    minLength(1, "Plan ID is required"),
+  ),
 });
 
 // ========================================
@@ -66,59 +124,59 @@ export const planIdSchema = z.object({
 // ========================================
 
 // Create membership validation schema
-export const createMembershipSchema = z.object({
-  planId: z
-    .string()
-    .min(1, "Plan ID is required"),
-  startDate: z
-    .string()
-    .datetime()
-    .optional()
-    .transform((val) => val ? new Date(val) : undefined),
-  autoRenew: z
-    .boolean()
-    .default(false),
+export const createMembershipSchema = object({
+  planId: pipe(
+    string(),
+    minLength(1, "Plan ID is required"),
+  ),
+  startDate: optional(pipe(
+    string(),
+    isoDateTime(),
+    transform(value => new Date(value)),
+  )),
+  autoRenew: optional(boolean(), false),
 });
 
 // Create membership by staff (includes email lookup)
-export const createMembershipByStaffSchema = z.object({
-  email: z
-    .string()
-    .email("Invalid email format"),
-  planId: z
-    .string()
-    .min(1, "Plan ID is required"),
-  startDate: z
-    .string()
-    .datetime()
-    .optional()
-    .transform((val) => val ? new Date(val) : undefined),
-  autoRenew: z
-    .boolean()
-    .default(false),
+export const createMembershipByStaffSchema = object({
+  email: pipe(
+    string(),
+    email("Invalid email format"),
+  ),
+  planId: pipe(
+    string(),
+    minLength(1, "Plan ID is required"),
+  ),
+  startDate: optional(pipe(
+    string(),
+    isoDateTime(),
+    transform(value => new Date(value)),
+  )),
+  autoRenew: optional(boolean(), false),
 });
 
 // Update membership validation schema
-export const updateMembershipSchema = z.object({
-  status: MembershipStatusEnum.optional(),
-  autoRenew: z.boolean().optional(),
-  endDate: z
-    .string()
-    .datetime()
-    .optional()
-    .transform((val) => val ? new Date(val) : undefined),
+export const updateMembershipSchema = object({
+  status: optional(MembershipStatusEnum),
+  autoRenew: optional(boolean()),
+  endDate: optional(pipe(
+    string(),
+    isoDateTime(),
+    transform(value => new Date(value)),
+  )),
 });
 
 // Membership ID validation
-export const membershipIdSchema = z.object({
-  membershipId: z
-    .string()
-    .min(1, "Membership ID is required"),
+export const membershipIdSchema = object({
+  membershipId: pipe(
+    string(),
+    minLength(1, "Membership ID is required"),
+  ),
 });
 
 // Type inference
-export type CreatePlanInput = z.infer<typeof createPlanSchema>;
-export type UpdatePlanInput = z.infer<typeof updatePlanSchema>;
-export type CreateMembershipInput = z.infer<typeof createMembershipSchema>;
-export type CreateMembershipByStaffInput = z.infer<typeof createMembershipByStaffSchema>;
-export type UpdateMembershipInput = z.infer<typeof updateMembershipSchema>;
+export type CreatePlanInput = InferOutput<typeof createPlanSchema>;
+export type UpdatePlanInput = InferOutput<typeof updatePlanSchema>;
+export type CreateMembershipInput = InferOutput<typeof createMembershipSchema>;
+export type CreateMembershipByStaffInput = InferOutput<typeof createMembershipByStaffSchema>;
+export type UpdateMembershipInput = InferOutput<typeof updateMembershipSchema>;

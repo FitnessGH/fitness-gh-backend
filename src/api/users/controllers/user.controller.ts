@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 
-import { z } from "zod";
+import { ValiError, parse } from "valibot";
 
 import type { ProfileStatsResponse } from "../types/user.types.js";
 
@@ -33,7 +33,7 @@ class UserController {
   static async getUserById(req: Request, res: Response): Promise<void> {
     try {
       // Validate request parameters
-      const { id } = userIdSchema.parse(req.params);
+      const { id } = parse(userIdSchema, req.params);
 
       const profile = await UserService.getProfileById(id);
 
@@ -47,11 +47,11 @@ class UserController {
     catch (err) {
       console.error("Error fetching profile:", err);
 
-      if (err instanceof z.ZodError) {
+      if (err instanceof ValiError) {
         res.status(400).json(error(
           "Invalid request parameters",
           400,
-          err.errors,
+          err.issues,
           null,
         ));
         return;
@@ -67,8 +67,8 @@ class UserController {
   static async updateUser(req: Request, res: Response): Promise<void> {
     try {
       // Validate request parameters and body
-      const { id } = userIdSchema.parse(req.params);
-      const profileData = updateUserSchema.parse(req.body);
+      const { id } = parse(userIdSchema, req.params);
+      const profileData = parse(updateUserSchema, req.body);
 
       const profile = await UserService.updateProfile(id, profileData);
 
@@ -77,11 +77,11 @@ class UserController {
     catch (err) {
       console.error("Error updating profile:", err);
 
-      if (err instanceof z.ZodError) {
+      if (err instanceof ValiError) {
         res.status(400).json(error(
           "Invalid request data",
           400,
-          err.errors,
+          err.issues,
           null,
         ));
         return;
@@ -103,7 +103,7 @@ class UserController {
   static async deleteUser(req: Request, res: Response): Promise<void> {
     try {
       // Validate request parameters
-      const { id } = userIdSchema.parse(req.params);
+      const { id } = parse(userIdSchema, req.params);
 
       await UserService.deleteProfile(id);
       res.status(204).send();
@@ -111,11 +111,11 @@ class UserController {
     catch (err) {
       console.error("Error deleting profile:", err);
 
-      if (err instanceof z.ZodError) {
+      if (err instanceof ValiError) {
         res.status(400).json(error(
           "Invalid request parameters",
           400,
-          err.errors,
+          err.issues,
           null,
         ));
         return;
@@ -137,7 +137,7 @@ class UserController {
   static async searchUsers(req: Request, res: Response): Promise<void> {
     try {
       // Validate query parameters
-      const { q } = searchUserSchema.parse(req.query);
+      const { q } = parse(searchUserSchema, req.query);
 
       const profiles = await UserService.searchProfiles(q);
       res.json(success(profiles));
@@ -145,11 +145,11 @@ class UserController {
     catch (err) {
       console.error("Error searching profiles:", err);
 
-      if (err instanceof z.ZodError) {
+      if (err instanceof ValiError) {
         res.status(400).json(error(
           "Invalid search parameters",
           400,
-          err.errors,
+          err.issues,
           null,
         ));
         return;

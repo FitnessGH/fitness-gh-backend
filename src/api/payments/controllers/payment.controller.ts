@@ -1,5 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 
+import { parse } from "valibot";
+
 import type { ApiResponse } from "@/types";
 import type { AuthenticatedRequest } from "@/middlewares/auth.middleware";
 import { ForbiddenError, NotFoundError } from "@/errors";
@@ -31,7 +33,7 @@ class PaymentController {
         throw new ForbiddenError({ message: "Profile not found" });
       }
 
-      const validatedData = initiatePaymentSchema.parse(req.body);
+      const validatedData = parse(initiatePaymentSchema, req.body);
 
       const payment = await PaymentService.initiatePayment({
         profileId,
@@ -59,7 +61,7 @@ class PaymentController {
     next: NextFunction,
   ): Promise<void> {
     try {
-      const { reference } = verifyPaymentSchema.parse(req.params);
+      const { reference } = parse(verifyPaymentSchema, req.params);
       const result = await PaymentService.verifyPayment(reference);
 
       res.status(200).json({
@@ -84,7 +86,7 @@ class PaymentController {
   ): Promise<void> {
     try {
       // In real scenario, validate signature here
-      const event = webhookSchema.parse(req.body);
+      const event = parse(webhookSchema, req.body);
       
       // Async processing
       await PaymentService.handleWebhook(event as any);
@@ -146,7 +148,7 @@ class PaymentController {
         throw new ForbiddenError({ message: "Profile not found" });
       }
 
-      const { id: gymId } = gymIdSchema.parse(req.params);
+      const { id: gymId } = parse(gymIdSchema, req.params);
 
       // Check access
       await GymService.checkGymAccess(gymId, profileId, ["MANAGER"]);

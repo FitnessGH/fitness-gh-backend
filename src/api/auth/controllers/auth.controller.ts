@@ -1,5 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 
+import { parse } from "valibot";
+
 import type { ApiResponse } from "@/types";
 import { NotFoundError } from "@/errors";
 
@@ -23,7 +25,7 @@ class AuthController {
     next: NextFunction,
   ): Promise<void> {
     try {
-      const validatedData = registerSchema.parse(req.body);
+      const validatedData = parse(registerSchema, req.body);
       const result = await AuthService.register(validatedData);
 
       res.status(201).json({
@@ -47,7 +49,7 @@ class AuthController {
     next: NextFunction,
   ): Promise<void> {
     try {
-      const validatedData = loginSchema.parse(req.body);
+      const validatedData = parse(loginSchema, req.body);
       const result = await AuthService.login(validatedData);
 
       res.status(200).json({
@@ -71,7 +73,7 @@ class AuthController {
     next: NextFunction,
   ): Promise<void> {
     try {
-      const { refreshToken } = refreshTokenSchema.parse(req.body);
+      const { refreshToken } = parse(refreshTokenSchema, req.body);
       const tokens = await AuthService.refresh(refreshToken);
 
       res.status(200).json({
@@ -95,7 +97,7 @@ class AuthController {
     next: NextFunction,
   ): Promise<void> {
     try {
-      const { refreshToken } = refreshTokenSchema.parse(req.body);
+      const { refreshToken } = parse(refreshTokenSchema, req.body);
       await AuthService.logout(refreshToken);
 
       res.status(200).json({
@@ -173,7 +175,7 @@ class AuthController {
   ): Promise<void> {
     try {
       const accountId = (req as Request & { accountId: string }).accountId;
-      const { currentPassword, newPassword } = changePasswordSchema.parse(req.body);
+      const { currentPassword, newPassword } = parse(changePasswordSchema, req.body);
 
       await AuthService.changePassword(accountId, currentPassword, newPassword);
 
