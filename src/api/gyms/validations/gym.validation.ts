@@ -67,16 +67,6 @@ export const createGymSchema = object({
     minLength(2, "Country must be at least 2 characters"),
     maxLength(100, "Country must not exceed 100 characters"),
   ), "Ghana"),
-  latitude: optional(pipe(
-    number(),
-    minValue(-90, "Latitude must be between -90 and 90"),
-    maxValue(90, "Latitude must be between -90 and 90"),
-  )),
-  longitude: optional(pipe(
-    number(),
-    minValue(-180, "Longitude must be between -180 and 180"),
-    maxValue(180, "Longitude must be between -180 and 180"),
-  )),
   phone: optional(pipe(
     string(),
     regex(/^\+?[\d\s-]+$/, "Invalid phone number format"),
