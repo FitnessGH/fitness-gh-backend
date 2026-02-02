@@ -76,3 +76,4 @@ dist
 
 examples
 /src/generated/prisma
+.vercel
