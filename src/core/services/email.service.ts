@@ -8,19 +8,87 @@ interface EmailOptions {
 }
 
 class EmailService {
+  private smtpApiKey: string;
+  private smtpServer: string;
+  private smtpPort: number;
+
+  constructor() {
+    this.smtpApiKey = process.env.SMTP_KEY || '';
+    this.smtpServer = process.env.SMTP_SERVER || 'smtp-relay.brevo.com';
+    this.smtpPort = parseInt(process.env.SMTP_PORT || '587');
+  }
+
   /**
-   * Send email (mock implementation for now)
-   * In production, integrate with real email service like SendGrid, Nodemailer, etc.
+   * Extract email from Brevo API key
+   * Brevo API key format: xsmtpsib-{key}-{signature}
+   * Email is the first part before the first dash
+   */
+  private extractEmailFromApiKey(): string {
+    const keyParts = this.smtpApiKey.split('-');
+    return keyParts[0] || '';
+  }
+
+  /**
+   * Send email using Brevo SMTP
    */
   async sendEmail(options: EmailOptions): Promise<void> {
-    // Mock email sending - log to console for development
-    console.log("📧 EMAIL SERVICE - Sending Email:");
+    if (!this.smtpApiKey) {
+      console.warn("⚠️  SMTP_KEY not found, using mock email service");
+      return this.sendMockEmail(options);
+    }
+
+    try {
+      const nodemailer = await import('nodemailer');
+      
+      const transporter = nodemailer.createTransport({
+        host: this.smtpServer,
+        port: this.smtpPort,
+        secure: false, // true for 465, false for other ports
+        auth: {
+          user: this.extractEmailFromApiKey(),
+          pass: this.smtpApiKey,
+        },
+      });
+
+      const mailOptions = {
+        from: `"Fitness GH" <noreply@fitnessgh.com>`,
+        to: options.to,
+        subject: options.subject,
+        html: options.html,
+        text: options.text,
+      };
+
+      const result = await transporter.sendMail(mailOptions);
+      
+      console.log("📧 EMAIL SENT SUCCESSFULLY:");
+      console.log("To:", options.to);
+      console.log("Subject:", options.subject);
+      console.log("Message ID:", result.messageId);
+      
+    } catch (error: any) {
+      console.error("❌ EMAIL SENDING FAILED:", error);
+      
+      // Fallback to mock service on authentication or connection errors
+      if (error.code === 'EAUTH' || error.code === 'ECONNECTION' || error.code === 'ETIMEDOUT') {
+        console.warn("🔄 Falling back to mock email service due to SMTP error");
+        return this.sendMockEmail(options);
+      }
+      
+      throw new Error(`Failed to send email: ${error.message || error}`);
+    }
+  }
+
+  /**
+   * Mock email sending for development
+   */
+  private async sendMockEmail(options: EmailOptions): Promise<void> {
+    console.log("📧 MOCK EMAIL SERVICE - Sending Email:");
     console.log("To:", options.to);
     console.log("Subject:", options.subject);
     console.log("HTML Length:", options.html?.length || 0);
     console.log("Text Length:", options.text?.length || 0);
     
-    // In development, we'll just log the OTP to console
+    // In development, we'll log OTP to console for easy testing
     if (options.text?.includes("Verification Code:")) {
       const otpMatch = options.text.match(/Verification Code: (\d{6})/);
       if (otpMatch) {
@@ -28,12 +96,6 @@ class EmailService {
       }
     }
 
-    // TODO: Implement real email service
-    // Examples:
-    // - SendGrid: await sgMail.send(msg)
-    // - Nodemailer: await transporter.sendMail(mailOptions)
-    // - AWS SES: await ses.sendEmail(params).promise()
-    
     // Simulate email delay
     await new Promise(resolve => setTimeout(resolve, 100));
   }

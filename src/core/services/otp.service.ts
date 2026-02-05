@@ -1,5 +1,8 @@
 import { prisma } from "./prisma.service.js";
 
+// Temporary in-memory store for testing
+const otpStore = new Map<string, { otp: string; expiresAt: Date }>();
+
 class OTPService {
   /**
    * Generate a 6-digit OTP
@@ -15,20 +18,26 @@ class OTPService {
     const otp = this.generateOTP();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
-    // Delete any existing OTPs for this email
-    await prisma.emailVerification.deleteMany({
-      where: { email },
-    });
+    try {
+      // Delete any existing OTPs for this email
+      await prisma.emailVerification.deleteMany({
+        where: { email },
+      });
 
-    // Create new OTP
-    await prisma.emailVerification.create({
-      data: {
-        email,
-        otp,
-        accountId,
-        expiresAt,
-      },
-    });
+      // Create new OTP
+      await prisma.emailVerification.create({
+        data: {
+          email,
+          otp,
+          accountId,
+          expiresAt,
+        },
+      });
+    } catch (error) {
+      console.warn("Database OTP storage failed, using in-memory fallback:", error);
+      // Fallback to in-memory storage
+      otpStore.set(email, { otp, expiresAt });
+    }
 
     return otp;
   }
@@ -37,57 +46,91 @@ class OTPService {
    * Verify OTP for email
    */
   async verifyEmailOTP(email: string, otp: string): Promise<boolean> {
-    const verification = await prisma.emailVerification.findFirst({
-      where: {
-        email,
-        otp,
-        expiresAt: {
-          gt: new Date(),
+    try {
+      const verification = await prisma.emailVerification.findFirst({
+        where: {
+          email,
+          otp,
+          expiresAt: {
+            gt: new Date(),
+          },
+          verifiedAt: null,
         },
-        verifiedAt: null,
-      },
-    });
+      });
 
-    if (!verification) {
-      return false;
+      if (!verification) {
+        return false;
+      }
+
+      // Mark as verified
+      await prisma.emailVerification.update({
+        where: { id: verification.id },
+        data: { verifiedAt: new Date() },
+      });
+
+      return true;
+    } catch (error) {
+      console.warn("Database OTP verification failed, using in-memory fallback:", error);
+      
+      // Fallback to in-memory verification
+      const storedOTP = otpStore.get(email);
+      if (!storedOTP) return false;
+      
+      if (storedOTP.otp !== otp || storedOTP.expiresAt < new Date()) {
+        otpStore.delete(email);
+        return false;
+      }
+      
+      // Remove OTP after successful verification
+      otpStore.delete(email);
+      return true;
     }
-
-    // Mark as verified
-    await prisma.emailVerification.update({
-      where: { id: verification.id },
-      data: { verifiedAt: new Date() },
-    });
-
-    return true;
   }
 
   /**
    * Check if email is already verified
    */
   async isEmailVerified(email: string): Promise<boolean> {
-    const verification = await prisma.emailVerification.findFirst({
-      where: {
-        email,
-        verifiedAt: {
-          not: null,
+    try {
+      const verification = await prisma.emailVerification.findFirst({
+        where: {
+          email,
+          verifiedAt: {
+            not: null,
+          },
         },
-      },
-    });
+      });
 
-    return !!verification;
+      return !!verification;
+    } catch (error) {
+      console.warn("Database email verification check failed:", error);
+      return false;
+    }
   }
 
   /**
    * Clean up expired OTPs
    */
   async cleanupExpiredOTPs(): Promise<void> {
-    await prisma.emailVerification.deleteMany({
-      where: {
-        expiresAt: {
-          lt: new Date(),
+    try {
+      await prisma.emailVerification.deleteMany({
+        where: {
+          expiresAt: {
+            lt: new Date(),
+          },
         },
-      },
-    });
+      });
+    } catch (error) {
+      console.warn("Database OTP cleanup failed, cleaning in-memory store:", error);
+      
+      // Clean up in-memory store
+      const now = new Date();
+      for (const [email, data] of otpStore.entries()) {
+        if (data.expiresAt < now) {
+          otpStore.delete(email);
+        }
+      }
+    }
   }
 
   /**

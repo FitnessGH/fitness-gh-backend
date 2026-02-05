@@ -1,10 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
-
 import { parse } from "valibot";
-
 import type { ApiResponse } from "../../../types/api-response.type.js";
 import { NotFoundError } from "../../../errors/not-found.error.js";
-
 import AuthService from "../services/auth.service.js";
 import emailService from "../../../core/services/email.service.js";
 import otpService from "../../../core/services/otp.service.js";
@@ -16,7 +13,7 @@ import {
   sendOTPSchema,
   verifyOTPSchema,
 } from "../validations/auth.validation.js";
-import type { AuthResponse, AuthTokens, OTPResponse } from "../types/auth.types.js";
+import type { AuthResponse, AuthTokens, OTPResponse, RegisterData } from "../types/auth.types.js";
 
 class AuthController {
   /**
@@ -30,7 +27,7 @@ class AuthController {
   ): Promise<void> {
     try {
       const validatedData = parse(registerSchema, req.body);
-      const result = await AuthService.register(validatedData);
+      const result = await AuthService.register(validatedData as RegisterData);
 
       res.status(201).json({
         success: true,
@@ -161,6 +158,7 @@ class AuthController {
         res.status(400).json({
           success: false,
           message: "Invalid or expired OTP",
+          status: 400,
           data: { success: false, message: "Invalid or expired OTP" },
         });
         return;
