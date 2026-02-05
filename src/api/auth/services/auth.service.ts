@@ -108,6 +108,19 @@ class AuthService {
       await this.storeRefreshToken(result.account.id, tokens.refreshToken);
     }
 
+    if (!result.account.emailVerified) {
+      return {
+        account: {
+          id: result.account.id,
+          email: result.account.email,
+          userType: result.account.userType,
+          emailVerified: result.account.emailVerified,
+        },
+        profile: null,
+        tokens: null,
+      };
+    }
+
     return {
       account: this.sanitizeAccount(result.account),
       profile: result.profile,

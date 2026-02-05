@@ -5,8 +5,15 @@ export type AuthTokens = {
   refreshToken: string;
 };
 
+export type AuthResponseAccount = {
+  id: string;
+  email: string;
+  userType: UserType;
+  emailVerified: boolean;
+} & Partial<SafeAccount>;
+
 export type AuthResponse = {
-  account: SafeAccount;
+  account: AuthResponseAccount;
   profile: UserProfile | null;
   tokens: AuthTokens | null;
 };
