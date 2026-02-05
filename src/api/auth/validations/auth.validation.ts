@@ -8,6 +8,7 @@ import {
   regex,
   string,
   type InferOutput,
+  enum as enumType,
 } from "valibot";
 
 // Registration validation schema
@@ -32,6 +33,10 @@ export const registerSchema = object({
     maxLength(50, "Username must not exceed 50 characters"),
     regex(/^\w+$/, "Username can only contain letters, numbers, and underscores"),
   ),
+  userType: optional(pipe(
+    string(),
+    regex(/^(GYM_OWNER|MEMBER|EMPLOYEE)$/, "Invalid user type")
+  )),
   firstName: optional(pipe(
     string(),
     minLength(1, "First name cannot be empty"),
@@ -45,6 +50,16 @@ export const registerSchema = object({
   phone: optional(pipe(
     string(),
     regex(/^\+?[\d\s-]+$/, "Invalid phone number format"),
+  )),
+  gymName: optional(pipe(
+    string(),
+    minLength(2, "Gym name must be at least 2 characters"),
+    maxLength(100, "Gym name must not exceed 100 characters"),
+  )),
+  businessName: optional(pipe(
+    string(),
+    minLength(2, "Business name must be at least 2 characters"),
+    maxLength(100, "Business name must not exceed 100 characters"),
   )),
 });
 

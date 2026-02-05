@@ -70,6 +70,32 @@ class AuthService {
         },
       });
 
+      // Handle gym owner registration - create gym record
+      if (data.userType === "GYM_OWNER" && data.gymName) {
+        await tx.gym.create({
+          data: {
+            name: data.gymName,
+            slug: `${data.gymName.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}`,
+            address: "TBA", // Required field, to be updated later
+            city: "TBA",   // Required field, to be updated later
+            region: "TBA", // Required field, to be updated later
+            ownerId: profile.id,
+          },
+        });
+      }
+
+      // Handle vendor registration - store business name in preferences for now
+      if (data.userType === "EMPLOYEE" && data.businessName) {
+        await tx.userProfile.update({
+          where: { id: profile.id },
+          data: {
+            preferences: {
+              businessName: data.businessName,
+            },
+          },
+        });
+      }
+
       return { account, profile };
     });
 

@@ -22,6 +22,8 @@ export type RegisterData = {
   lastName?: string;
   phone?: string;
   userType?: UserType;
+  gymName?: string;
+  businessName?: string;
 };
 
 export type LoginData = {
