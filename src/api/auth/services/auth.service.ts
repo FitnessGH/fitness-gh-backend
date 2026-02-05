@@ -99,11 +99,14 @@ class AuthService {
       return { account, profile };
     });
 
-    // Generate tokens
-    const tokens = this.generateTokens(result.account, result.profile);
+    // Generate tokens only after email verification
+    const tokens = result.account.emailVerified
+      ? this.generateTokens(result.account, result.profile)
+      : null;
 
-    // Store refresh token
-    await this.storeRefreshToken(result.account.id, tokens.refreshToken);
+    if (tokens) {
+      await this.storeRefreshToken(result.account.id, tokens.refreshToken);
+    }
 
     return {
       account: this.sanitizeAccount(result.account),

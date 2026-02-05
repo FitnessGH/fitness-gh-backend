@@ -8,7 +8,7 @@ export type AuthTokens = {
 export type AuthResponse = {
   account: SafeAccount;
   profile: UserProfile | null;
-  tokens: AuthTokens;
+  tokens: AuthTokens | null;
 };
 
 // Account without sensitive fields
