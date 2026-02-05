@@ -10,7 +10,7 @@ const envSchema = object({
     string(),
     transform(value => Number(value)),
     number(),
-  ), 5001),
+  )),
   DATABASE_URL: pipe(
     string(),
     minLength(1, "DATABASE_URL is required"),
@@ -46,7 +46,7 @@ export const env = parseEnv();
 const config = {
   env: process.env,
   nodeEnv: env.NODE_ENV,
-  port: env.PORT,
+  port: env.PORT ?? 5001,
   databaseUrl: env.DATABASE_URL,
 
   // JWT settings

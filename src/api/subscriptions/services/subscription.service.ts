@@ -1,8 +1,8 @@
 import type { DurationUnit, MembershipStatus, SubscriptionPlan, Membership } from "@prisma/client";
 
-import { prisma } from "../../core/services/prisma.service.js";
-import { ConflictError } from "../../errors/conflict.error.js";
-import { NotFoundError } from "../../errors/not-found.error.js";
+import { prisma } from "../../../core/services/prisma.service.js";
+import { ConflictError } from "../../../errors/conflict.error.js";
+import { NotFoundError } from "../../../errors/not-found.error.js";
 
 import type {
   CreateMembershipData,

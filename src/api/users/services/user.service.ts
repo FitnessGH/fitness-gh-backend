@@ -1,6 +1,6 @@
 import type { UserProfile } from "@prisma/client";
 
-import { prisma } from "../../core/services/prisma.service.js";
+import { prisma } from "../../../core/services/prisma.service.js";
 
 import type { CreateProfileData, UpdateProfileData, ProfileResponse } from "../types/user.types.js";
 

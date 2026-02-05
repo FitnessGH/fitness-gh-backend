@@ -1,4 +1,4 @@
-import type { Request } from "express";
+import type { Express, Request } from "express";
 
 import cors from "cors";
 import express from "express";
@@ -13,7 +13,7 @@ import rootRoute from "./core/routes/root.route.js";
 import { NotFoundError } from "./errors/not-found.error.js";
 import { errorHandler } from "./middlewares/error-handler.middleware.js";
 
-const app = express();
+const app: Express = express();
 
 app.use(helmet());
 app.use(helmet.crossOriginResourcePolicy({ policy: "cross-origin" }));
