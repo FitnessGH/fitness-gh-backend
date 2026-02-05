@@ -2,7 +2,7 @@ import type { JwtPayload, SignOptions } from "jsonwebtoken";
 
 import jwt from "jsonwebtoken";
 
-import config from "@/config";
+import config from "../../config/env.config.js";
 
 export type TokenPayload = {
   accountId: string;

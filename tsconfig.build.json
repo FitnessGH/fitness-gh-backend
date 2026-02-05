@@ -2,8 +2,13 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "allowImportingTsExtensions": false,
+    "rootDir": ".",
     "noEmit": false
   },
+  "include": [
+    "src/**/*",
+    "api/**/*"
+  ],
   "exclude": [
     "test/**/*",
     "**/*.test.ts",

@@ -1,9 +1,9 @@
 import type { NextFunction, Request, Response } from "express";
 import { ValiError } from "valibot";
 
-import type { ResponseError } from "@/errors";
+import type { ResponseError } from "../errors/custom.error.js";
 
-import { CustomError } from "@/errors";
+import { CustomError } from "../errors/custom.error.js";
 
 export function errorHandler(
   err: Error,

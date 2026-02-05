@@ -2,9 +2,10 @@ import type { NextFunction, Request, Response } from "express";
 
 import { parse } from "valibot";
 
-import type { ApiResponse } from "@/types";
-import type { AuthenticatedRequest } from "@/middlewares/auth.middleware";
-import { ForbiddenError, NotFoundError } from "@/errors";
+import type { ApiResponse } from "../../../types/api-response.type.js";
+import type { AuthenticatedRequest } from "../../../middlewares/auth.middleware.js";
+import { ForbiddenError } from "../../../errors/forbidden.error.js";
+import { NotFoundError } from "../../../errors/not-found.error.js";
 
 import GymService from "../services/gym.service.js";
 import {

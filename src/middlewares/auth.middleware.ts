@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 
-import jwtService from "@/core/services/jwt.service.js";
-import { UnauthorizedError } from "@/errors";
+import jwtService from "../core/services/jwt.service.js";
+import { UnauthorizedError } from "../errors/unauthorized.error.js";
 
 export type AuthenticatedRequest = Request & {
   accountId: string;

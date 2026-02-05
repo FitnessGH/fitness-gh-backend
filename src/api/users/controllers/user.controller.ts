@@ -10,7 +10,7 @@ import {
   updateUserSchema,
   userIdSchema,
 } from "../validations/user.validation.js";
-import { error, success } from "@/utils/response.util.js";
+import { error, success } from "../../utils/response.util.js";
 
 class UserController {
   /**

@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
 
-import { BaseRoute } from "@/core/base-route";
-import { description, name, version } from "@root/package.json" with { type: "json" };
+import { BaseRoute } from "../base-route.js";
+import { description, name, version } from "../../../package.json" with { type: "json" };
 
 class InfoRoute extends BaseRoute {
   protected initializeRoutes(): void {

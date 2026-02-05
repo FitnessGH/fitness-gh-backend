@@ -2,10 +2,11 @@ import type { NextFunction, Request, Response } from "express";
 
 import { parse } from "valibot";
 
-import type { ApiResponse } from "@/types";
-import type { AuthenticatedRequest } from "@/middlewares/auth.middleware";
-import { ForbiddenError, NotFoundError } from "@/errors";
-import GymService from "@/api/gyms/services/gym.service.js";
+import type { ApiResponse } from "../../../types/api-response.type.js";
+import type { AuthenticatedRequest } from "../../../middlewares/auth.middleware.js";
+import { ForbiddenError } from "../../../errors/forbidden.error.js";
+import { NotFoundError } from "../../../errors/not-found.error.js";
+import GymService from "../../gyms/services/gym.service.js";
 
 import PaymentService from "../services/payment.service.js";
 import {
@@ -13,7 +14,7 @@ import {
   verifyPaymentSchema,
   webhookSchema,
 } from "../validations/payment.validation.js";
-import { gymIdSchema } from "@/api/gyms/validations/gym.validation.js";
+import { gymIdSchema } from "../../gyms/validations/gym.validation.js";
 
 class PaymentController {
   /**

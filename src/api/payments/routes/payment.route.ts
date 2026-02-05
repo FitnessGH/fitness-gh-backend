@@ -1,5 +1,5 @@
-import { BaseRoute } from "@/core/base-route";
-import { authenticate } from "@/middlewares/auth.middleware.js";
+import { BaseRoute } from "../../../core/base-route.js";
+import { authenticate } from "../../../middlewares/auth.middleware.js";
 
 import PaymentController from "../controllers/payment.controller.js";
 

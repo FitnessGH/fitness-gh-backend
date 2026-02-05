@@ -1,7 +1,9 @@
 import type { EmployeeRole, Gym, Employment } from "@prisma/client";
 
-import { prisma } from "@/core/services/prisma.service.js";
-import { ConflictError, ForbiddenError, NotFoundError } from "@/errors";
+import { prisma } from "../../core/services/prisma.service.js";
+import { ConflictError } from "../../errors/conflict.error.js";
+import { ForbiddenError } from "../../errors/forbidden.error.js";
+import { NotFoundError } from "../../errors/not-found.error.js";
 
 import type {
   CreateGymData,

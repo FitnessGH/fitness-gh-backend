@@ -1,4 +1,4 @@
-import { CustomError } from "@/errors/custom.error";
+import { CustomError } from "./custom.error.js";
 /**
  * The ConflictError class is a custom error class for when the user is not
  * authorized to perform a requested action.

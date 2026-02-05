@@ -1,6 +1,6 @@
 import type { NextFunction, Request, RequestHandler, Response, Router } from "express";
 
-import { createRouter } from "@/utils/router";
+import { createRouter } from "../utils/router.js";
 
 /**
  * Base class for creating route modules

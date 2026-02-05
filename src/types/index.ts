@@ -1,6 +1,6 @@
-export * from "@/types/custom-request.type";
-export * from "@/types/error-response.type";
-export * from "@/types/message-response.type";
+export * from "./custom-request.type.js";
+export * from "./error-response.type.js";
+export * from "./message-response.type.js";
 export type {
   ApiResponse,
   ApiSuccessResponse,

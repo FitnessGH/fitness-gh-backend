@@ -2,9 +2,11 @@ import type { Account, UserProfile } from "@prisma/client";
 
 import bcrypt from "bcrypt";
 
-import { prisma } from "@/core/services/prisma.service.js";
-import jwtService from "@/core/services/jwt.service.js";
-import { ConflictError, NotFoundError, UnauthorizedError } from "@/errors";
+import { prisma } from "../../core/services/prisma.service.js";
+import jwtService from "../../core/services/jwt.service.js";
+import { ConflictError } from "../../errors/conflict.error.js";
+import { NotFoundError } from "../../errors/not-found.error.js";
+import { UnauthorizedError } from "../../errors/unauthorized.error.js";
 
 import type { AuthResponse, AuthTokens, LoginData, RegisterData, SafeAccount } from "../types/auth.types.js";
 

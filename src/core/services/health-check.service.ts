@@ -1,4 +1,4 @@
-import PrismaService from "@/core/services/prisma.service";
+import PrismaService from "./prisma.service.js";
 
 class HealthCheckService {
   static async checkServiceHealth() {

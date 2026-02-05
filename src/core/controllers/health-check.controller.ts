@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 
-import HealthCheckService from "@/core/services/health-check.service";
+import HealthCheckService from "../services/health-check.service.js";
 
 class HealthCheckController {
   static async getHealthStatus(_req: Request, res: Response) {

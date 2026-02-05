@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 
-import { BaseRoute } from "@/core/base-route";
+import { BaseRoute } from "../base-route.js";
 
 class RootRoute extends BaseRoute {
   protected initializeRoutes(): void {

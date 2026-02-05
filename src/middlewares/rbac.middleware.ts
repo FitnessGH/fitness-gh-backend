@@ -2,7 +2,8 @@ import type { NextFunction, Request, Response } from "express";
 
 import type { UserType } from "@prisma/client";
 
-import { ForbiddenError, UnauthorizedError } from "@/errors";
+import { ForbiddenError } from "../errors/forbidden.error.js";
+import { UnauthorizedError } from "../errors/unauthorized.error.js";
 
 import type { AuthenticatedRequest } from "./auth.middleware.js";
 

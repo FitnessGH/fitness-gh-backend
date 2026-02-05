@@ -2,8 +2,8 @@ import type { NextFunction, Request, Response } from "express";
 
 import { parse } from "valibot";
 
-import type { ApiResponse } from "@/types";
-import { NotFoundError } from "@/errors";
+import type { ApiResponse } from "../../../types/api-response.type.js";
+import { NotFoundError } from "../../../errors/not-found.error.js";
 
 import AuthService from "../services/auth.service.js";
 import {

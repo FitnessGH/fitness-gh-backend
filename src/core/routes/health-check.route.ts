@@ -1,5 +1,5 @@
-import { BaseRoute } from "@/core/base-route";
-import HealthCheckController from "@/core/controllers/health-check.controller";
+import { BaseRoute } from "../base-route.js";
+import HealthCheckController from "../controllers/health-check.controller.js";
 
 class HealthCheckRoute extends BaseRoute {
   protected initializeRoutes(): void {

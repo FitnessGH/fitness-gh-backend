@@ -1,6 +1,6 @@
-import { BaseRoute } from "@/core/base-route";
-import { authenticate } from "@/middlewares/auth.middleware.js";
-import { requireGymOwner } from "@/middlewares/rbac.middleware.js";
+import { BaseRoute } from "../../../core/base-route.js";
+import { authenticate } from "../../../middlewares/auth.middleware.js";
+import { requireGymOwner } from "../../../middlewares/rbac.middleware.js";
 
 import GymController from "../controllers/gym.controller.js";
 

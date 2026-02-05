@@ -1,4 +1,4 @@
-import { CustomError } from "@/errors/custom.error";
+import { CustomError } from "./custom.error.js";
 
 /**
  * The ForbiddenError class is a custom error class for when the user is not

@@ -1,4 +1,4 @@
-import type { ApiErrorResponse, ApiMeta, ApiSuccessResponse } from "@/types/api-response.type";
+import type { ApiErrorResponse, ApiMeta, ApiSuccessResponse } from "../types/api-response.type.js";
 
 /**
  * Creates a standardized success response

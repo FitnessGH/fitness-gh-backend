@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 
-import type { CustomRequest } from "@/types";
+import type { CustomRequest } from "../types/index.js";
 
 export function asyncHandler(fn: (req: CustomRequest, res: Response, next: NextFunction) => void) {
   return (req: Request, res: Response, next: NextFunction) => {

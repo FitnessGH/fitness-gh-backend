@@ -1,8 +1,8 @@
 import { randomBytes } from "crypto";
 
-import { prisma } from "@/core/services/prisma.service.js";
-import { NotFoundError } from "@/errors";
-import SubscriptionService from "@/api/subscriptions/services/subscription.service.js";
+import { prisma } from "../../core/services/prisma.service.js";
+import { NotFoundError } from "../../errors/not-found.error.js";
+import SubscriptionService from "../../subscriptions/services/subscription.service.js";
 
 import type { InitiatePaymentData, PaymentResponse, VerifyPaymentResponse, WebhookEvent } from "../types/payment.types.js";
 
