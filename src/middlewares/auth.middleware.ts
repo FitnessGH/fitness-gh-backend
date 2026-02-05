@@ -1,4 +1,6 @@
-import type { NextFunction, Request, Response } from "express";
+import type { Request, Response } from "express";
+
+type NextFunction = (err?: unknown) => void;
 
 import jwtService from "../core/services/jwt.service.js";
 import { UnauthorizedError } from "../errors/unauthorized.error.js";
@@ -19,7 +21,7 @@ export function authenticate(
   next: NextFunction,
 ): void {
   try {
-    const authHeader = req.headers.authorization;
+    const authHeader = (req as { headers?: { authorization?: string } }).headers?.authorization;
 
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       throw new UnauthorizedError({ message: "No access token provided" });
@@ -54,7 +56,7 @@ export function optionalAuth(
   next: NextFunction,
 ): void {
   try {
-    const authHeader = req.headers.authorization;
+    const authHeader = (req as { headers?: { authorization?: string } }).headers?.authorization;
 
     if (authHeader && authHeader.startsWith("Bearer ")) {
       const token = authHeader.substring(7);

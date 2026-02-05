@@ -1,4 +1,6 @@
-import type { NextFunction, Request, Response } from "express";
+import type { Request, Response } from "express";
+
+type NextFunction = (err?: unknown) => void;
 
 import type { UserType } from "@prisma/client";
 

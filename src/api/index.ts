@@ -1,3 +1,5 @@
+import type { Request, Response } from "express";
+
 import { BaseRoute } from "../core/base-route.js";
 
 import { authRoute } from "./auth/index.js";
@@ -9,7 +11,7 @@ import { userRoute } from "./users/index.js";
 class ApiRoute extends BaseRoute {
   protected initializeRoutes(): void {
     // Mount sub-routes
-    this.router.get("/health", (req, res) => {
+    this.router.get("/health", (_req: Request, res: Response) => {
       res.json({
         message: "OK",
       });

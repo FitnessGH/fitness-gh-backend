@@ -3,7 +3,8 @@
   "compilerOptions": {
     "allowImportingTsExtensions": false,
     "rootDir": ".",
-    "noEmit": false
+    "noEmit": false,
+    "moduleResolution": "node"
   },
   "include": [
     "src/**/*",

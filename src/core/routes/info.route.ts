@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
 
 import { BaseRoute } from "../base-route.js";
-import { description, name, version } from "../../../package.json" with { type: "json" };
+import packageJson from "../../../package.json" with { type: "json" };
 
 class InfoRoute extends BaseRoute {
   protected initializeRoutes(): void {
@@ -9,6 +9,12 @@ class InfoRoute extends BaseRoute {
   }
 
   private getInfo(req: Request, res: Response): void {
+    const { name, version, description } = packageJson as {
+      name?: string;
+      version?: string;
+      description?: string;
+    };
+
     res.json({
       name,
       version,
