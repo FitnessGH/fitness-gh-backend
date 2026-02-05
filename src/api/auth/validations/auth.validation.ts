@@ -127,6 +127,30 @@ export const changePasswordSchema = object({
   ),
 });
 
+// Send OTP validation schema
+export const sendOTPSchema = object({
+  email: pipe(
+    string(),
+    minLength(1, "Email is required"),
+    email("Invalid email format"),
+  ),
+});
+
+// Verify OTP validation schema
+export const verifyOTPSchema = object({
+  email: pipe(
+    string(),
+    minLength(1, "Email is required"),
+    email("Invalid email format"),
+  ),
+  otp: pipe(
+    string(),
+    minLength(6, "OTP must be 6 digits"),
+    maxLength(6, "OTP must be 6 digits"),
+    regex(/^\d{6}$/, "OTP must contain only numbers"),
+  ),
+});
+
 // Type inference
 export type RegisterInput = InferOutput<typeof registerSchema>;
 export type LoginInput = InferOutput<typeof loginSchema>;
@@ -134,3 +158,5 @@ export type RefreshTokenInput = InferOutput<typeof refreshTokenSchema>;
 export type ForgotPasswordInput = InferOutput<typeof forgotPasswordSchema>;
 export type ResetPasswordInput = InferOutput<typeof resetPasswordSchema>;
 export type ChangePasswordInput = InferOutput<typeof changePasswordSchema>;
+export type SendOTPInput = InferOutput<typeof sendOTPSchema>;
+export type VerifyOTPInput = InferOutput<typeof verifyOTPSchema>;

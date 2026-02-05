@@ -38,3 +38,17 @@ export type ProfileWithAccount = UserProfile & {
 export type AccountWithProfile = Account & {
   profile: UserProfile | null;
 };
+
+export type SendOTPData = {
+  email: string;
+};
+
+export type VerifyOTPData = {
+  email: string;
+  otp: string;
+};
+
+export type OTPResponse = {
+  success: boolean;
+  message: string;
+};

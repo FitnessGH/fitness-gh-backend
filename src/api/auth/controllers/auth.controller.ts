@@ -6,13 +6,17 @@ import type { ApiResponse } from "../../../types/api-response.type.js";
 import { NotFoundError } from "../../../errors/not-found.error.js";
 
 import AuthService from "../services/auth.service.js";
+import emailService from "../../../core/services/email.service.js";
+import otpService from "../../../core/services/otp.service.js";
 import {
   changePasswordSchema,
   loginSchema,
   refreshTokenSchema,
   registerSchema,
+  sendOTPSchema,
+  verifyOTPSchema,
 } from "../validations/auth.validation.js";
-import type { AuthResponse, AuthTokens } from "../types/auth.types.js";
+import type { AuthResponse, AuthTokens, OTPResponse } from "../types/auth.types.js";
 
 class AuthController {
   /**
@@ -107,6 +111,67 @@ class AuthController {
       });
     }
     catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /auth/send-otp
+   * Send OTP to email for verification
+   */
+  async sendOTP(
+    req: Request,
+    res: Response<ApiResponse<OTPResponse>>,
+    next: NextFunction,
+  ): Promise<void> {
+    try {
+      const { email } = parse(sendOTPSchema, req.body);
+      
+      // Generate and store OTP
+      const otp = await otpService.createEmailOTP(email);
+      
+      // Send OTP email
+      await emailService.sendVerificationEmail(email, otp);
+
+      res.status(200).json({
+        success: true,
+        message: "OTP sent successfully",
+        data: { success: true, message: "OTP sent to your email" },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /auth/verify-otp
+   * Verify OTP for email
+   */
+  async verifyOTP(
+    req: Request,
+    res: Response<ApiResponse<OTPResponse>>,
+    next: NextFunction,
+  ): Promise<void> {
+    try {
+      const { email, otp } = parse(verifyOTPSchema, req.body);
+      
+      const isValid = await otpService.verifyEmailOTP(email, otp);
+      
+      if (!isValid) {
+        res.status(400).json({
+          success: false,
+          message: "Invalid or expired OTP",
+          data: { success: false, message: "Invalid or expired OTP" },
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        message: "Email verified successfully",
+        data: { success: true, message: "Email verified successfully" },
+      });
+    } catch (error) {
       next(error);
     }
   }

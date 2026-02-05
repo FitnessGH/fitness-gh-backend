@@ -42,6 +42,7 @@ model Account {
   
   // Auth relations
   refreshTokens RefreshToken[]
+  emailVerifications EmailVerification[]
   
   @@map("accounts")
 }
@@ -63,6 +64,23 @@ model RefreshToken {
   revokedAt DateTime?
   
   @@map("refresh_tokens")
+}
+
+// ============================================
+// EMAIL VERIFICATION - OTP System
+// ============================================
+model EmailVerification {
+  id        String   @id @default(cuid())
+  email     String
+  otp       String
+  accountId String?
+  account   Account? @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  verifiedAt DateTime?
+  
+  @@unique([email, otp])
+  @@map("email_verifications")
 }
 
 // ============================================

@@ -10,6 +10,10 @@ class AuthRoute extends BaseRoute {
     this.post("/login", AuthController.login);
     this.post("/refresh", AuthController.refresh);
     this.post("/logout", AuthController.logout);
+    
+    // OTP routes
+    this.post("/send-otp", AuthController.sendOTP);
+    this.post("/verify-otp", AuthController.verifyOTP);
 
     // Protected routes (require authentication)
     this.get("/me", authenticate, AuthController.me);
