@@ -174,6 +174,7 @@ class AuthController {
     }
   }
 
+
   /**
    * POST /auth/logout-all
    * Logout from all devices
