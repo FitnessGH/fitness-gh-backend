@@ -16,6 +16,7 @@ const envSchema = object({
     minLength(1, "DATABASE_URL is required"),
   ),
   DIRECT_DATABASE_URL: optional(string()),
+  CORS_ORIGIN: optional(string()),
 
   // JWT Configuration (required in production, defaults in dev/test)
   JWT_ACCESS_SECRET: optional(string(), DEV_SECRET),
@@ -54,6 +55,7 @@ const config = {
   jwtRefreshSecret: env.JWT_REFRESH_SECRET,
   jwtAccessExpiry: env.JWT_ACCESS_EXPIRY,
   jwtRefreshExpiry: env.JWT_REFRESH_EXPIRY,
+  corsOrigin: env.CORS_ORIGIN,
 };
 
 // Make the configuration object available to the entire application code
