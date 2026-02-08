@@ -5,6 +5,7 @@ import { NotFoundError } from "../../../errors/not-found.error.js";
 import AuthService from "../services/auth.service.js";
 import emailService from "../../../core/services/email.service.js";
 import otpService from "../../../core/services/otp.service.js";
+import { prisma } from "../../../core/services/prisma.service.js";
 import {
   changePasswordSchema,
   loginSchema,
@@ -123,12 +124,13 @@ class AuthController {
   ): Promise<void> {
     try {
       const { email } = parse(sendOTPSchema, req.body);
+      const normalizedEmail = email.trim().toLowerCase();
       
       // Generate and store OTP
-      const otp = await otpService.createEmailOTP(email);
+      const otp = await otpService.createEmailOTP(normalizedEmail);
       
       // Send OTP email
-      await emailService.sendVerificationEmail(email, otp);
+      await emailService.sendVerificationEmail(normalizedEmail, otp);
 
       res.status(200).json({
         success: true,
@@ -151,8 +153,9 @@ class AuthController {
   ): Promise<void> {
     try {
       const { email, otp } = parse(verifyOTPSchema, req.body);
+      const normalizedEmail = email.trim().toLowerCase();
       
-      const isValid = await otpService.verifyEmailOTP(email, otp);
+      const isValid = await otpService.verifyEmailOTP(normalizedEmail, otp);
       
       if (!isValid) {
         res.status(400).json({
@@ -163,6 +166,11 @@ class AuthController {
         });
         return;
       }
+
+      await prisma.account.updateMany({
+        where: { email: normalizedEmail, emailVerified: false },
+        data: { emailVerified: true },
+      });
 
       res.status(200).json({
         success: true,

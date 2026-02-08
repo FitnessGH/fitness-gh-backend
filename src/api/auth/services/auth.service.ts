@@ -19,9 +19,11 @@ class AuthService {
    * Register a new user account with profile
    */
   async register(data: RegisterData): Promise<AuthResponse> {
+    const normalizedEmail = data.email.trim().toLowerCase();
+
     // Check if email already exists
     const existingEmail = await prisma.account.findUnique({
-      where: { email: data.email },
+      where: { email: normalizedEmail },
     });
     if (existingEmail) {
       throw new ConflictError({ message: "An account with this email already exists" });
@@ -53,7 +55,7 @@ class AuthService {
       // Create account
       const account = await tx.account.create({
         data: {
-          email: data.email,
+          email: normalizedEmail,
           passwordHash,
           phone: data.phone,
           userType: data.userType || "MEMBER",
@@ -132,9 +134,10 @@ class AuthService {
    * Login with email and password
    */
   async login(data: LoginData): Promise<AuthResponse> {
+    const normalizedEmail = data.email.trim().toLowerCase();
     // Find account by email
     const account = await prisma.account.findUnique({
-      where: { email: data.email },
+      where: { email: normalizedEmail },
       include: { profile: true },
     });
 
