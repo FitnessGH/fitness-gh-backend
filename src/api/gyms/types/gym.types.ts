@@ -42,6 +42,10 @@ export type GymResponse = {
   updatedAt: Date;
 };
 
+export type GymResponseWithOwner = GymResponse & {
+  owner: Pick<UserProfile, "id" | "username" | "firstName" | "lastName" | "avatarUrl">;
+};
+
 export type GymWithOwner = Gym & {
   owner: Pick<UserProfile, "id" | "username" | "firstName" | "lastName" | "avatarUrl">;
 };

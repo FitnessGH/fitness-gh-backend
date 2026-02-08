@@ -57,6 +57,7 @@ class GymController {
   /**
    * GET /gyms
    * List all active gyms (public)
+   * Query params: includeOwner (boolean) - include owner information
    */
   async listGyms(
     req: Request,
@@ -64,7 +65,8 @@ class GymController {
     next: NextFunction,
   ): Promise<void> {
     try {
-      const gyms = await GymService.getAllGyms();
+      const includeOwner = req.query.includeOwner === 'true' || req.query.includeOwner === '1';
+      const gyms = await GymService.getAllGyms({ includeOwner });
 
       res.status(200).json({
         success: true,

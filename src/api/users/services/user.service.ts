@@ -27,6 +27,37 @@ class UserService {
   }
 
   /**
+   * Get all users with account information (for admin)
+   */
+  static async getAllUsersWithAccounts() {
+    return await prisma.account.findMany({
+      select: {
+        id: true,
+        email: true,
+        phone: true,
+        emailVerified: true,
+        phoneVerified: true,
+        userType: true,
+        isActive: true,
+        lastLoginAt: true,
+        createdAt: true,
+        updatedAt: true,
+        profile: {
+          select: {
+            id: true,
+            username: true,
+            firstName: true,
+            lastName: true,
+            avatarUrl: true,
+            createdAt: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  /**
    * Get profile by ID
    */
   static async getProfileById(id: string): Promise<UserProfile | null> {

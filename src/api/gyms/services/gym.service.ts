@@ -9,6 +9,7 @@ import type {
   CreateGymData,
   EmployeeResponse,
   GymResponse,
+  GymResponseWithOwner,
   GymWithOwner,
   UpdateEmploymentData,
   UpdateGymData,
@@ -42,7 +43,45 @@ class GymService {
   /**
    * Get all gyms (public list)
    */
-  async getAllGyms(options?: { isActive?: boolean }): Promise<GymResponse[]> {
+  async getAllGyms(options?: { isActive?: boolean; includeOwner?: boolean }): Promise<GymResponse[] | GymResponseWithOwner[]> {
+    if (options?.includeOwner) {
+      return await prisma.gym.findMany({
+        where: {
+          isActive: options?.isActive ?? true,
+        },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          description: true,
+          address: true,
+          city: true,
+          region: true,
+          country: true,
+          latitude: true,
+          longitude: true,
+          phone: true,
+          email: true,
+          website: true,
+          logoUrl: true,
+          coverUrl: true,
+          isActive: true,
+          createdAt: true,
+          updatedAt: true,
+          owner: {
+            select: {
+              id: true,
+              username: true,
+              firstName: true,
+              lastName: true,
+              avatarUrl: true,
+            },
+          },
+        },
+        orderBy: { name: "asc" },
+      }) as GymResponseWithOwner[];
+    }
+    
     return await prisma.gym.findMany({
       where: {
         isActive: options?.isActive ?? true,

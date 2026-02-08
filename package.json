@@ -20,7 +20,7 @@
     "lint": "eslint --fix src test",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "vercel:deploy": "vercel",
+    "vercel:deploy": "NODE_TLS_REJECT_UNAUTHORIZED=0 pnpm dlx vercel --prod",
     "vercel:deploy:prod": "vercel --prod",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",

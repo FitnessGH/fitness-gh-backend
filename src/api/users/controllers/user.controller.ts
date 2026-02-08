@@ -15,15 +15,28 @@ import { error, success } from "../../../utils/response.util.js";
 class UserController {
   /**
    * Get all profiles
+   * If query param `withAccounts=true`, returns users with account info (for admin)
    */
   static async getUsers(req: Request, res: Response): Promise<void> {
     try {
-      const profiles = await UserService.getAllProfiles();
-      res.json(success(profiles));
+      const withAccountsParam = req.query.withAccounts;
+      const withAccounts = withAccountsParam === 'true' || withAccountsParam === '1';
+      
+      console.log('getUsers called with withAccounts:', withAccounts, 'query:', req.query);
+      
+      if (withAccounts) {
+        const users = await UserService.getAllUsersWithAccounts();
+        console.log('Returning users with accounts, count:', users.length);
+        res.json(success(users));
+      } else {
+        const profiles = await UserService.getAllProfiles();
+        console.log('Returning profiles only, count:', profiles.length);
+        res.json(success(profiles));
+      }
     }
     catch (err) {
-      console.error("Error fetching profiles:", err);
-      res.status(500).json(error("Failed to fetch profiles", 500, null, null));
+      console.error("Error fetching users:", err);
+      res.status(500).json(error("Failed to fetch users", 500, null, null));
     }
   }
 
