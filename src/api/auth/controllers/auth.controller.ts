@@ -126,8 +126,23 @@ class AuthController {
       const { email } = parse(sendOTPSchema, req.body);
       const normalizedEmail = email.trim().toLowerCase();
       
+      // Find account by email (emails are stored lowercase, so direct match)
+      console.log(`📧 [Auth Controller] Sending OTP for email: ${normalizedEmail}`);
+      const account = await prisma.account.findUnique({
+        where: { email: normalizedEmail },
+        select: { id: true, email: true, emailVerified: true },
+      });
+      
+      const accountId = account?.id;
+      console.log(`📧 [Auth Controller] Account lookup result:`, {
+        found: !!account,
+        accountId: accountId || 'none',
+        email: account?.email || 'none',
+        emailVerified: account?.emailVerified ?? 'none',
+      });
+
       // Generate and store OTP
-      const otp = await otpService.createEmailOTP(normalizedEmail);
+      const otp = await otpService.createEmailOTP(normalizedEmail, accountId);
       
       // Send OTP email
       await emailService.sendVerificationEmail(normalizedEmail, otp);
@@ -148,34 +163,38 @@ class AuthController {
    */
   async verifyOTP(
     req: Request,
-    res: Response<ApiResponse<OTPResponse>>,
+    res: Response<ApiResponse<AuthResponse>>,
     next: NextFunction,
   ): Promise<void> {
     try {
       const { email, otp } = parse(verifyOTPSchema, req.body);
       const normalizedEmail = email.trim().toLowerCase();
       
+      console.log(`🔐 [Auth Controller] Verifying OTP for email: ${normalizedEmail}`);
       const isValid = await otpService.verifyEmailOTP(normalizedEmail, otp);
       
       if (!isValid) {
+        console.log(`❌ [Auth Controller] OTP verification failed for: ${normalizedEmail}`);
         res.status(400).json({
           success: false,
           message: "Invalid or expired OTP",
           status: 400,
-          data: { success: false, message: "Invalid or expired OTP" },
+          data: { success: false, message: "Invalid or expired OTP" } as any,
         });
         return;
       }
 
-      await prisma.account.updateMany({
-        where: { email: normalizedEmail, emailVerified: false },
-        data: { emailVerified: true },
-      });
+      console.log(`✅ [Auth Controller] OTP verified successfully, generating tokens...`);
+      
+      // Get account and generate tokens
+      const authResponse = await AuthService.getAccountAndTokensAfterVerification(normalizedEmail);
+      
+      console.log(`✅ [Auth Controller] Tokens generated successfully for account: ${authResponse.account.id}`);
 
       res.status(200).json({
         success: true,
         message: "Email verified successfully",
-        data: { success: true, message: "Email verified successfully" },
+        data: authResponse,
       });
     } catch (error) {
       next(error);

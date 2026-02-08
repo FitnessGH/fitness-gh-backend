@@ -161,4 +161,3 @@ export type ResetPasswordInput = InferOutput<typeof resetPasswordSchema>;
 export type ChangePasswordInput = InferOutput<typeof changePasswordSchema>;
 export type SendOTPInput = InferOutput<typeof sendOTPSchema>;
 export type VerifyOTPInput = InferOutput<typeof verifyOTPSchema>;
-export type TestEmailInput = InferOutput<typeof testEmailSchema>;

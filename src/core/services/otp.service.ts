@@ -15,28 +15,39 @@ class OTPService {
    * Create and store OTP for email verification
    */
   async createEmailOTP(email: string, accountId?: string): Promise<string> {
+    const normalizedEmail = email.trim().toLowerCase();
     const otp = this.generateOTP();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
+    console.log(`📧 [OTP Creation] Creating OTP for email: ${normalizedEmail}, accountId: ${accountId || 'none'}`);
+
     try {
       // Delete any existing OTPs for this email
-      await prisma.emailVerification.deleteMany({
-        where: { email },
+      const deletedCount = await prisma.emailVerification.deleteMany({
+        where: { email: normalizedEmail },
       });
+      console.log(`🗑️ [OTP Creation] Deleted ${deletedCount.count} existing OTP records`);
 
       // Create new OTP
-      await prisma.emailVerification.create({
+      const verification = await prisma.emailVerification.create({
         data: {
-          email,
+          email: normalizedEmail,
           otp,
           accountId,
           expiresAt,
         },
       });
+      console.log(`✅ [OTP Creation] OTP created successfully:`, {
+        id: verification.id,
+        email: verification.email,
+        accountId: verification.accountId,
+        expiresAt: verification.expiresAt,
+      });
     } catch (error) {
-      console.warn("Database OTP storage failed, using in-memory fallback:", error);
+      console.warn("⚠️ [OTP Creation] Database OTP storage failed, using in-memory fallback:", error);
       // Fallback to in-memory storage
-      otpStore.set(email, { otp, expiresAt });
+      otpStore.set(normalizedEmail, { otp, expiresAt });
+      console.log(`💾 [OTP Creation] Stored OTP in memory for: ${normalizedEmail}`);
     }
 
     return otp;
@@ -46,10 +57,14 @@ class OTPService {
    * Verify OTP for email
    */
   async verifyEmailOTP(email: string, otp: string): Promise<boolean> {
+    const normalizedEmail = email.trim().toLowerCase();
+    console.log(`🔍 [OTP Verification] Starting verification for email: ${normalizedEmail}, OTP: ${otp}`);
+    
     try {
+      console.log(`🔍 [OTP Verification] Searching for verification record...`);
       const verification = await prisma.emailVerification.findFirst({
         where: {
-          email,
+          email: normalizedEmail,
           otp,
           expiresAt: {
             gt: new Date(),
@@ -59,30 +74,90 @@ class OTPService {
       });
 
       if (!verification) {
+        console.log(`❌ [OTP Verification] No valid verification record found for email: ${normalizedEmail}`);
         return false;
       }
 
+      console.log(`✅ [OTP Verification] Found verification record:`, {
+        id: verification.id,
+        email: verification.email,
+        accountId: verification.accountId,
+        expiresAt: verification.expiresAt,
+      });
+
       // Mark as verified
+      console.log(`📝 [OTP Verification] Marking emailVerification record as verified...`);
       await prisma.emailVerification.update({
         where: { id: verification.id },
         data: { verifiedAt: new Date() },
       });
+      console.log(`✅ [OTP Verification] EmailVerification record updated successfully`);
 
-      return true;
+      // Update account emailVerified status
+      if (verification.accountId) {
+        console.log(`📝 [OTP Verification] Updating account by accountId: ${verification.accountId}`);
+        // Update by accountId (most reliable)
+        const result = await prisma.account.update({
+          where: { id: verification.accountId },
+          data: { emailVerified: true },
+        });
+        console.log(`✅ [OTP Verification] Account updated successfully:`, {
+          accountId: result.id,
+          email: result.email,
+          emailVerified: result.emailVerified,
+        });
+        return true;
+      } else {
+        console.log(`⚠️ [OTP Verification] No accountId in verification record, falling back to email lookup`);
+        // Fallback: find account by email (stored lowercase) and update
+        const account = await prisma.account.findUnique({
+          where: { email: normalizedEmail },
+          select: { id: true, email: true, emailVerified: true },
+        });
+        
+        if (account) {
+          console.log(`📝 [OTP Verification] Found account by email:`, {
+            accountId: account.id,
+            email: account.email,
+            currentEmailVerified: account.emailVerified,
+          });
+          const result = await prisma.account.update({
+            where: { id: account.id },
+            data: { emailVerified: true },
+          });
+          console.log(`✅ [OTP Verification] Account updated successfully (fallback):`, {
+            accountId: result.id,
+            email: result.email,
+            emailVerified: result.emailVerified,
+          });
+          return true;
+        } else {
+          console.warn(`⚠️ [OTP Verification] No account found for email: ${normalizedEmail}`);
+          // Still return true if OTP was valid, but log the issue
+          return true;
+        }
+      }
+
     } catch (error) {
-      console.warn("Database OTP verification failed, using in-memory fallback:", error);
+      console.error("❌ [OTP Verification] Database OTP verification failed:", error);
+      if (error instanceof Error) {
+        console.error("❌ [OTP Verification] Error details:", {
+          message: error.message,
+          stack: error.stack,
+        });
+      }
       
       // Fallback to in-memory verification
-      const storedOTP = otpStore.get(email);
+      const storedOTP = otpStore.get(normalizedEmail);
       if (!storedOTP) return false;
       
       if (storedOTP.otp !== otp || storedOTP.expiresAt < new Date()) {
-        otpStore.delete(email);
+        otpStore.delete(normalizedEmail);
         return false;
       }
       
       // Remove OTP after successful verification
-      otpStore.delete(email);
+      otpStore.delete(normalizedEmail);
       return true;
     }
   }

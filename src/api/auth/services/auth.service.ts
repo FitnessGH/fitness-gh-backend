@@ -258,6 +258,42 @@ class AuthService {
   }
 
   /**
+   * Get account and generate tokens after OTP verification
+   */
+  async getAccountAndTokensAfterVerification(email: string): Promise<AuthResponse> {
+    const normalizedEmail = email.trim().toLowerCase();
+    
+    const account = await prisma.account.findUnique({
+      where: { email: normalizedEmail },
+      include: { profile: true },
+    });
+
+    if (!account) {
+      throw new NotFoundError({ message: "Account not found" });
+    }
+
+    if (!account.emailVerified) {
+      throw new UnauthorizedError({ message: "Email not verified" });
+    }
+
+    if (!account.isActive) {
+      throw new UnauthorizedError({ message: "This account has been deactivated" });
+    }
+
+    // Generate tokens
+    const tokens = this.generateTokens(account, account.profile);
+
+    // Store refresh token
+    await this.storeRefreshToken(account.id, tokens.refreshToken);
+
+    return {
+      account: this.sanitizeAccount(account),
+      profile: account.profile,
+      tokens,
+    };
+  }
+
+  /**
    * Change password
    */
   async changePassword(accountId: string, currentPassword: string, newPassword: string): Promise<void> {
