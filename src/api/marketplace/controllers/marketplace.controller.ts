@@ -7,6 +7,7 @@ import type { AuthenticatedRequest } from "../../../middlewares/auth.middleware.
 import { ForbiddenError } from "../../../errors/forbidden.error.js";
 
 import MarketplaceService from "../services/marketplace.service.js";
+import type { CreateProductData, UpdateProductData } from "../types/marketplace.types.js";
 import {
   createProductSchema,
   updateProductSchema,
@@ -58,6 +59,7 @@ class MarketplaceController {
       if (!product) {
         res.status(404).json({
           success: false,
+          status: 404,
           message: "Product not found",
         });
         return;
@@ -90,7 +92,13 @@ class MarketplaceController {
       }
 
       const validatedData = parse(createProductSchema, req.body);
-      const product = await MarketplaceService.createProduct(profileId, validatedData);
+      // Cast validated data to match CreateProductData type
+      const productData: CreateProductData = {
+        ...validatedData,
+        imageUrl: validatedData.imageUrl as string | undefined,
+        images: validatedData.images as string[] | undefined,
+      };
+      const product = await MarketplaceService.createProduct(profileId, productData);
 
       res.status(201).json({
         success: true,
@@ -121,7 +129,15 @@ class MarketplaceController {
 
       const { id } = req.params;
       const validatedData = parse(updateProductSchema, req.body);
-      const product = await MarketplaceService.updateProduct(id, profileId, validatedData);
+      // Cast validated data to match UpdateProductData type
+      const productData: UpdateProductData = {
+        ...validatedData,
+        imageUrl: validatedData.imageUrl as string | undefined,
+        images: validatedData.images as string[] | undefined,
+        // Convert number (0 or 1) to boolean
+        isActive: validatedData.isActive !== undefined ? Boolean(validatedData.isActive) : undefined,
+      };
+      const product = await MarketplaceService.updateProduct(id, profileId, productData);
 
       res.status(200).json({
         success: true,
@@ -156,6 +172,7 @@ class MarketplaceController {
       res.status(200).json({
         success: true,
         message: "Product deleted successfully",
+        data: null,
       });
     } catch (error) {
       next(error);
@@ -249,6 +266,7 @@ class MarketplaceController {
       if (!order) {
         res.status(404).json({
           success: false,
+          status: 404,
           message: "Order not found",
         });
         return;

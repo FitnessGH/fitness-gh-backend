@@ -94,3 +94,11 @@ export type OrderResponse = {
 export type UpdateOrderStatusData = {
   status: OrderStatus;
 };
+
+export type ProductFiltersInput = {
+  category?: ProductCategory;
+  search?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  sortBy?: "price" | "rating" | "createdAt";
+};

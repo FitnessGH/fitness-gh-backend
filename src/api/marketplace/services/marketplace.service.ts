@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "../../../core/services/prisma.service.js";
 import { NotFoundError } from "../../../errors/not-found.error.js";
 import { ConflictError } from "../../../errors/conflict.error.js";
@@ -393,7 +394,7 @@ class MarketplaceService {
           orderNumber,
           total,
           currency: "GHS",
-          shippingAddress: data.shippingAddress || null,
+          shippingAddress: data.shippingAddress ? (data.shippingAddress as Prisma.InputJsonValue) : Prisma.JsonNull,
           status: "PENDING",
           items: {
             create: orderItems,
@@ -442,7 +443,7 @@ class MarketplaceService {
       }
 
       return newOrder;
-    });
+    }) as any;
 
     return {
       id: order.id,
@@ -456,7 +457,7 @@ class MarketplaceService {
       updatedAt: order.updatedAt,
       shippedAt: order.shippedAt,
       deliveredAt: order.deliveredAt,
-      items: order.items.map((item) => ({
+      items: order.items.map((item: any) => ({
         id: item.id,
         productId: item.productId,
         quantity: item.quantity,

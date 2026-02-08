@@ -116,6 +116,10 @@ model UserProfile {
   memberships Membership[]
   payments    Payment[]
   
+  // Marketplace relations
+  products    Product[]    @relation("ProductVendor")
+  orders      Order[]      @relation("OrderCustomer")
+  
   @@map("user_profiles")
 }
 
@@ -331,6 +335,129 @@ enum PaymentStatus {
   COMPLETED
   FAILED
   REFUNDED
+}
+
+// ============================================
+// PRODUCT - Marketplace products
+// ============================================
+model Product {
+  id          String      @id @default(cuid())
+  
+  // Vendor (references UserProfile with EMPLOYEE userType)
+  vendorId    String
+  vendor      UserProfile @relation("ProductVendor", fields: [vendorId], references: [id])
+  
+  // Product Details
+  name        String
+  description String?
+  category    ProductCategory
+  price       Float
+  currency    String      @default("GHS")
+  
+  // Inventory
+  stock       Int         @default(0)
+  sku         String?     @unique
+  
+  // Media
+  imageUrl    String?
+  images      Json?       // Array of image URLs
+  
+  // Status
+  status      ProductStatus @default(DRAFT)
+  isActive    Boolean     @default(true)
+  
+  // Ratings & Reviews
+  rating      Float?      @default(0)
+  reviewCount Int         @default(0)
+  
+  // Timestamps
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  
+  // Relations
+  orderItems  OrderItem[]
+  
+  @@map("products")
+}
+
+enum ProductCategory {
+  SUPPLEMENTS
+  EQUIPMENT
+  ACCESSORIES
+  APPAREL
+  OTHER
+}
+
+enum ProductStatus {
+  DRAFT
+  ACTIVE
+  OUT_OF_STOCK
+  DISCONTINUED
+}
+
+// ============================================
+// ORDER - Marketplace orders
+// ============================================
+model Order {
+  id          String      @id @default(cuid())
+  
+  // Customer (references UserProfile)
+  customerId  String
+  customer    UserProfile @relation("OrderCustomer", fields: [customerId], references: [id])
+  
+  // Order Details
+  orderNumber String      @unique
+  total       Float
+  currency    String      @default("GHS")
+  
+  // Shipping
+  shippingAddress Json?   // { street, city, region, country, phone }
+  
+  // Status
+  status      OrderStatus @default(PENDING)
+  
+  // Timestamps
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  shippedAt   DateTime?
+  deliveredAt DateTime?
+  
+  // Relations
+  items       OrderItem[]
+  
+  @@map("orders")
+}
+
+enum OrderStatus {
+  PENDING
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUNDED
+}
+
+// ============================================
+// ORDER ITEM - Order line items
+// ============================================
+model OrderItem {
+  id        String   @id @default(cuid())
+  
+  // Relations
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id])
+  
+  // Item Details
+  quantity  Int
+  price     Float    // Price at time of order
+  subtotal  Float    // quantity * price
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  
+  @@map("order_items")
 }
 
 // Enums

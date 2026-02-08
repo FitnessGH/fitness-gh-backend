@@ -50,8 +50,8 @@ export const createProductSchema = object({
   currency: optional(pipe(string(), minLength(3), maxLength(3))),
   stock: pipe(number(), minValue(0, "Stock cannot be negative")),
   sku: optional(pipe(string(), maxLength(100))),
-  imageUrl: optional(url("Invalid image URL")),
-  images: optional(array(url("Invalid image URL"))),
+  imageUrl: optional(pipe(string(), url("Invalid image URL"))),
+  images: optional(array(pipe(string(), url("Invalid image URL")))),
 });
 
 export type CreateProductInput = InferOutput<typeof createProductSchema>;
@@ -64,8 +64,8 @@ export const updateProductSchema = object({
   currency: optional(pipe(string(), minLength(3), maxLength(3))),
   stock: optional(pipe(number(), minValue(0))),
   sku: optional(pipe(string(), maxLength(100))),
-  imageUrl: optional(url("Invalid image URL")),
-  images: optional(array(url("Invalid image URL"))),
+  imageUrl: optional(pipe(string(), url("Invalid image URL"))),
+  images: optional(array(pipe(string(), url("Invalid image URL")))),
   status: optional(productStatusSchema),
   isActive: optional(pipe(number(), minValue(0), maxValue(1))),
 });
