@@ -4,6 +4,7 @@ import { BaseRoute } from "../core/base-route.js";
 
 import { authRoute } from "./auth/index.js";
 import { gymRoute } from "./gyms/index.js";
+import { marketplaceRoute } from "./marketplace/index.js";
 import { paymentRoute } from "./payments/index.js";
 import { subscriptionRoute } from "./subscriptions/index.js";
 import { userRoute } from "./users/index.js";
@@ -18,6 +19,7 @@ class ApiRoute extends BaseRoute {
     });
     this.router.use("/auth", authRoute);
     this.router.use("/gyms", gymRoute);
+    this.router.use("/marketplace", marketplaceRoute);
     this.router.use("/payments", paymentRoute);
     this.router.use("/subscriptions", subscriptionRoute);
     this.router.use("/users", userRoute);
