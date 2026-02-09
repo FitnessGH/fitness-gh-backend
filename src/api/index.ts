@@ -7,6 +7,7 @@ import { gymRoute } from "./gyms/index.js";
 import { marketplaceRoute } from "./marketplace/index.js";
 import { paymentRoute } from "./payments/index.js";
 import { subscriptionRoute } from "./subscriptions/index.js";
+import { uploadRoute } from "./upload/index.js";
 import { userRoute } from "./users/index.js";
 
 class ApiRoute extends BaseRoute {
@@ -22,6 +23,7 @@ class ApiRoute extends BaseRoute {
     this.router.use("/marketplace", marketplaceRoute);
     this.router.use("/payments", paymentRoute);
     this.router.use("/subscriptions", subscriptionRoute);
+    this.router.use("/upload", uploadRoute);
     this.router.use("/users", userRoute);
   }
 }
