@@ -1,20 +1,21 @@
-import type { NextFunction, Request, Response } from "express";
-
-import { parse } from "valibot";
-
-import type { ApiResponse } from "../../../types/api-response.type.js";
-import type { AuthenticatedRequest } from "../../../middlewares/auth.middleware.js";
-import { ForbiddenError } from "../../../errors/forbidden.error.js";
-
-import MarketplaceService from "../services/marketplace.service.js";
-import type { CreateProductData, UpdateProductData } from "../types/marketplace.types.js";
+import type { NextFunction, Request, Response } from 'express';
+import { parse } from 'valibot';
+import { ForbiddenError } from '../../../errors/forbidden.error.js';
+import type { AuthenticatedRequest } from '../../../middlewares/auth.middleware.js';
+import type { ApiResponse } from '../../../types/api-response.type.js';
+import type {
+  CreateProductData,
+  UpdateProductData,
+} from '../types/marketplace.types.js';
 import {
-  createProductSchema,
-  updateProductSchema,
   createOrderSchema,
-  updateOrderStatusSchema,
+  createProductSchema,
   productFiltersSchema,
-} from "../validations/marketplace.validation.js";
+  updateOrderStatusSchema,
+  updateProductSchema,
+} from '../validations/marketplace.validation.js';
+
+import MarketplaceService from '../services/marketplace.service.js';
 
 class MarketplaceController {
   // ========================================
@@ -31,7 +32,9 @@ class MarketplaceController {
     next: NextFunction,
   ): Promise<void> {
     try {
-      const filters = req.query ? parse(productFiltersSchema, req.query) : undefined;
+      const filters = req.query
+        ? parse(productFiltersSchema, req.query)
+        : undefined;
       const products = await MarketplaceService.getAllProducts(filters);
 
       res.status(200).json({
@@ -53,14 +56,14 @@ class MarketplaceController {
     next: NextFunction,
   ): Promise<void> {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const product = await MarketplaceService.getProductById(id);
 
       if (!product) {
         res.status(404).json({
           success: false,
           status: 404,
-          message: "Product not found",
+          message: 'Product not found',
         });
         return;
       }
@@ -88,7 +91,7 @@ class MarketplaceController {
       const profileId = authReq.profileId;
 
       if (!profileId) {
-        throw new ForbiddenError({ message: "Profile not found" });
+        throw new ForbiddenError({ message: 'Profile not found' });
       }
 
       const validatedData = parse(createProductSchema, req.body);
@@ -98,11 +101,14 @@ class MarketplaceController {
         imageUrl: validatedData.imageUrl as string | undefined,
         images: validatedData.images as string[] | undefined,
       };
-      const product = await MarketplaceService.createProduct(profileId, productData);
+      const product = await MarketplaceService.createProduct(
+        profileId,
+        productData,
+      );
 
       res.status(201).json({
         success: true,
-        message: "Product created successfully",
+        message: 'Product created successfully',
         data: product,
       });
     } catch (error) {
@@ -124,10 +130,10 @@ class MarketplaceController {
       const profileId = authReq.profileId;
 
       if (!profileId) {
-        throw new ForbiddenError({ message: "Profile not found" });
+        throw new ForbiddenError({ message: 'Profile not found' });
       }
 
-      const { id } = req.params;
+      const id = req.params.id as string;
       const validatedData = parse(updateProductSchema, req.body);
       // Cast validated data to match UpdateProductData type
       const productData: UpdateProductData = {
@@ -135,13 +141,20 @@ class MarketplaceController {
         imageUrl: validatedData.imageUrl as string | undefined,
         images: validatedData.images as string[] | undefined,
         // Convert number (0 or 1) to boolean
-        isActive: validatedData.isActive !== undefined ? Boolean(validatedData.isActive) : undefined,
+        isActive:
+          validatedData.isActive !== undefined
+            ? Boolean(validatedData.isActive)
+            : undefined,
       };
-      const product = await MarketplaceService.updateProduct(id, profileId, productData);
+      const product = await MarketplaceService.updateProduct(
+        id,
+        profileId,
+        productData,
+      );
 
       res.status(200).json({
         success: true,
-        message: "Product updated successfully",
+        message: 'Product updated successfully',
         data: product,
       });
     } catch (error) {
@@ -163,15 +176,15 @@ class MarketplaceController {
       const profileId = authReq.profileId;
 
       if (!profileId) {
-        throw new ForbiddenError({ message: "Profile not found" });
+        throw new ForbiddenError({ message: 'Profile not found' });
       }
 
-      const { id } = req.params;
+      const id = req.params.id as string;
       await MarketplaceService.deleteProduct(id, profileId);
 
       res.status(200).json({
         success: true,
-        message: "Product deleted successfully",
+        message: 'Product deleted successfully',
         data: null,
       });
     } catch (error) {
@@ -193,7 +206,7 @@ class MarketplaceController {
       const profileId = authReq.profileId;
 
       if (!profileId) {
-        throw new ForbiddenError({ message: "Profile not found" });
+        throw new ForbiddenError({ message: 'Profile not found' });
       }
 
       const products = await MarketplaceService.getVendorProducts(profileId);
@@ -225,15 +238,18 @@ class MarketplaceController {
       const profileId = authReq.profileId;
 
       if (!profileId) {
-        throw new ForbiddenError({ message: "Profile not found" });
+        throw new ForbiddenError({ message: 'Profile not found' });
       }
 
       const validatedData = parse(createOrderSchema, req.body);
-      const order = await MarketplaceService.createOrder(profileId, validatedData);
+      const order = await MarketplaceService.createOrder(
+        profileId,
+        validatedData,
+      );
 
       res.status(201).json({
         success: true,
-        message: "Order created successfully",
+        message: 'Order created successfully',
         data: order,
       });
     } catch (error) {
@@ -256,18 +272,22 @@ class MarketplaceController {
       const userType = authReq.userType;
 
       if (!profileId) {
-        throw new ForbiddenError({ message: "Profile not found" });
+        throw new ForbiddenError({ message: 'Profile not found' });
       }
 
-      const { id } = req.params;
-      const isAdmin = userType === "SUPER_ADMIN" || userType === "ADMIN";
-      const order = await MarketplaceService.getOrderById(id, profileId, isAdmin);
+      const id = req.params.id as string;
+      const isAdmin = userType === 'SUPER_ADMIN' || userType === 'ADMIN';
+      const order = await MarketplaceService.getOrderById(
+        id,
+        profileId,
+        isAdmin,
+      );
 
       if (!order) {
         res.status(404).json({
           success: false,
           status: 404,
-          message: "Order not found",
+          message: 'Order not found',
         });
         return;
       }
@@ -295,7 +315,7 @@ class MarketplaceController {
       const profileId = authReq.profileId;
 
       if (!profileId) {
-        throw new ForbiddenError({ message: "Profile not found" });
+        throw new ForbiddenError({ message: 'Profile not found' });
       }
 
       const orders = await MarketplaceService.getCustomerOrders(profileId);
@@ -323,7 +343,7 @@ class MarketplaceController {
       const profileId = authReq.profileId;
 
       if (!profileId) {
-        throw new ForbiddenError({ message: "Profile not found" });
+        throw new ForbiddenError({ message: 'Profile not found' });
       }
 
       const orders = await MarketplaceService.getVendorOrders(profileId);
@@ -347,13 +367,16 @@ class MarketplaceController {
     next: NextFunction,
   ): Promise<void> {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const validatedData = parse(updateOrderStatusSchema, req.body);
-      const order = await MarketplaceService.updateOrderStatus(id, validatedData);
+      const order = await MarketplaceService.updateOrderStatus(
+        id,
+        validatedData,
+      );
 
       res.status(200).json({
         success: true,
-        message: "Order status updated successfully",
+        message: 'Order status updated successfully',
         data: order,
       });
     } catch (error) {

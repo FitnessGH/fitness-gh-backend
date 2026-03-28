@@ -1,11 +1,14 @@
-import type { NextFunction, Request, Response } from "express";
-import { parse } from "valibot";
-import type { ApiResponse } from "../../../types/api-response.type.js";
-import { NotFoundError } from "../../../errors/not-found.error.js";
-import AuthService from "../services/auth.service.js";
-import emailService from "../../../core/services/email.service.js";
-import otpService from "../../../core/services/otp.service.js";
-import { prisma } from "../../../core/services/prisma.service.js";
+import type { NextFunction, Request, Response } from 'express';
+import { parse } from 'valibot';
+import { prisma } from '../../../core/services/prisma.service.js';
+import { NotFoundError } from '../../../errors/not-found.error.js';
+import type { ApiResponse } from '../../../types/api-response.type.js';
+import type {
+  AuthResponse,
+  AuthTokens,
+  OTPResponse,
+  RegisterData,
+} from '../types/auth.types.js';
 import {
   changePasswordSchema,
   loginSchema,
@@ -13,8 +16,11 @@ import {
   registerSchema,
   sendOTPSchema,
   verifyOTPSchema,
-} from "../validations/auth.validation.js";
-import type { AuthResponse, AuthTokens, OTPResponse, RegisterData } from "../types/auth.types.js";
+} from '../validations/auth.validation.js';
+
+import emailService from '../../../core/services/email.service.js';
+import otpService from '../../../core/services/otp.service.js';
+import AuthService from '../services/auth.service.js';
 
 class AuthController {
   /**
@@ -32,11 +38,10 @@ class AuthController {
 
       res.status(201).json({
         success: true,
-        message: "Account registered successfully",
+        message: 'Account registered successfully',
         data: result,
       });
-    }
-    catch (error) {
+    } catch (error) {
       next(error);
     }
   }
@@ -56,11 +61,10 @@ class AuthController {
 
       res.status(200).json({
         success: true,
-        message: "Login successful",
+        message: 'Login successful',
         data: result,
       });
-    }
-    catch (error) {
+    } catch (error) {
       next(error);
     }
   }
@@ -80,11 +84,10 @@ class AuthController {
 
       res.status(200).json({
         success: true,
-        message: "Token refreshed successfully",
+        message: 'Token refreshed successfully',
         data: tokens,
       });
-    }
-    catch (error) {
+    } catch (error) {
       next(error);
     }
   }
@@ -104,11 +107,10 @@ class AuthController {
 
       res.status(200).json({
         success: true,
-        message: "Logged out successfully",
+        message: 'Logged out successfully',
         data: null,
       });
-    }
-    catch (error) {
+    } catch (error) {
       next(error);
     }
   }
@@ -125,14 +127,16 @@ class AuthController {
     try {
       const { email } = parse(sendOTPSchema, req.body);
       const normalizedEmail = email.trim().toLowerCase();
-      
+
       // Find account by email (emails are stored lowercase, so direct match)
-      console.log(`📧 [Auth Controller] Sending OTP for email: ${normalizedEmail}`);
+      console.log(
+        `📧 [Auth Controller] Sending OTP for email: ${normalizedEmail}`,
+      );
       const account = await prisma.account.findUnique({
         where: { email: normalizedEmail },
         select: { id: true, email: true, emailVerified: true },
       });
-      
+
       const accountId = account?.id;
       console.log(`📧 [Auth Controller] Account lookup result:`, {
         found: !!account,
@@ -143,14 +147,14 @@ class AuthController {
 
       // Generate and store OTP
       const otp = await otpService.createEmailOTP(normalizedEmail, accountId);
-      
+
       // Send OTP email
       await emailService.sendVerificationEmail(normalizedEmail, otp);
 
       res.status(200).json({
         success: true,
-        message: "OTP sent successfully",
-        data: { success: true, message: "OTP sent to your email" },
+        message: 'OTP sent successfully',
+        data: { success: true, message: 'OTP sent to your email' },
       });
     } catch (error) {
       next(error);
@@ -163,44 +167,65 @@ class AuthController {
    */
   async verifyOTP(
     req: Request,
-    res: Response<ApiResponse<AuthResponse>>,
+    res: Response<ApiResponse<AuthResponse | null>>,
     next: NextFunction,
   ): Promise<void> {
     try {
       const { email, otp } = parse(verifyOTPSchema, req.body);
       const normalizedEmail = email.trim().toLowerCase();
-      
-      console.log(`🔐 [Auth Controller] Verifying OTP for email: ${normalizedEmail}`);
+
+      console.log(
+        `🔐 [Auth Controller] Verifying OTP for email: ${normalizedEmail}`,
+      );
       const isValid = await otpService.verifyEmailOTP(normalizedEmail, otp);
-      
+
       if (!isValid) {
-        console.log(`❌ [Auth Controller] OTP verification failed for: ${normalizedEmail}`);
+        console.log(
+          `❌ [Auth Controller] OTP verification failed for: ${normalizedEmail}`,
+        );
         res.status(400).json({
           success: false,
-          message: "Invalid or expired OTP",
+          message: 'Invalid or expired OTP',
           status: 400,
-          data: { success: false, message: "Invalid or expired OTP" } as any,
+          data: { success: false, message: 'Invalid or expired OTP' } as any,
         });
         return;
       }
 
-      console.log(`✅ [Auth Controller] OTP verified successfully, generating tokens...`);
-      
-      // Get account and generate tokens
-      const authResponse = await AuthService.getAccountAndTokensAfterVerification(normalizedEmail);
-      
-      console.log(`✅ [Auth Controller] Tokens generated successfully for account: ${authResponse.account.id}`);
+      console.log(
+        `✅ [Auth Controller] OTP verified successfully, generating tokens...`,
+      );
+
+      const existingAccount = await prisma.account.findUnique({
+        where: { email: normalizedEmail },
+        select: { id: true },
+      });
+
+      if (!existingAccount) {
+        res.status(200).json({
+          success: true,
+          message: 'Email verified successfully',
+          data: null,
+        });
+        return;
+      }
+
+      const authResponse =
+        await AuthService.getAccountAndTokensAfterVerification(normalizedEmail);
+
+      console.log(
+        `✅ [Auth Controller] Tokens generated successfully for account: ${authResponse.account.id}`,
+      );
 
       res.status(200).json({
         success: true,
-        message: "Email verified successfully",
+        message: 'Email verified successfully',
         data: authResponse,
       });
     } catch (error) {
       next(error);
     }
   }
-
 
   /**
    * POST /auth/logout-all
@@ -218,11 +243,10 @@ class AuthController {
 
       res.status(200).json({
         success: true,
-        message: "Logged out from all devices",
+        message: 'Logged out from all devices',
         data: null,
       });
-    }
-    catch (error) {
+    } catch (error) {
       next(error);
     }
   }
@@ -241,16 +265,15 @@ class AuthController {
       const result = await AuthService.getAccountById(accountId);
 
       if (!result) {
-        throw new NotFoundError({ message: "Account not found" });
+        throw new NotFoundError({ message: 'Account not found' });
       }
 
       res.status(200).json({
         success: true,
-        message: "Account retrieved successfully",
+        message: 'Account retrieved successfully',
         data: result,
       });
-    }
-    catch (error) {
+    } catch (error) {
       next(error);
     }
   }
@@ -266,17 +289,19 @@ class AuthController {
   ): Promise<void> {
     try {
       const accountId = (req as Request & { accountId: string }).accountId;
-      const { currentPassword, newPassword } = parse(changePasswordSchema, req.body);
+      const { currentPassword, newPassword } = parse(
+        changePasswordSchema,
+        req.body,
+      );
 
       await AuthService.changePassword(accountId, currentPassword, newPassword);
 
       res.status(200).json({
         success: true,
-        message: "Password changed successfully",
+        message: 'Password changed successfully',
         data: null,
       });
-    }
-    catch (error) {
+    } catch (error) {
       next(error);
     }
   }
