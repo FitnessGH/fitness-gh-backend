@@ -318,7 +318,12 @@ class SubscriptionController {
       const profileId = authReq.profileId;
 
       if (!profileId) {
-        throw new ForbiddenError({ message: "Profile not found" });
+        // No profile yet — return empty memberships instead of throwing
+        res.status(200).json({
+          success: true,
+          data: [],
+        });
+        return;
       }
 
       const memberships = await SubscriptionService.getUserMemberships(profileId);
