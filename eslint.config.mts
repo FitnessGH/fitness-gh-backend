@@ -23,7 +23,7 @@ export default antfu({
     }],
     "unicorn/filename-case": ["error", {
       case: "kebabCase",
-      ignore: ["*.md"],
+      ignore: [String.raw`\.md$`],
     }],
     "test/prefer-lowercase-title": ["off"],
   },
