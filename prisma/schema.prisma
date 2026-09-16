@@ -327,6 +327,7 @@ model Payment {
   updatedAt       DateTime         @updatedAt
   paidAt          DateTime?
   
+  @@index([membershipId, status, createdAt])
   @@map("payments")
 }
 

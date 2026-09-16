@@ -1,47 +1,95 @@
-import { randomBytes } from "crypto";
-
-import { prisma } from "../../../core/services/prisma.service.js";
-import { NotFoundError } from "../../../errors/not-found.error.js";
-import SubscriptionService from "../../subscriptions/services/subscription.service.js";
+import { randomBytes } from "node:crypto";
 
 import type { InitiatePaymentData, PaymentResponse, VerifyPaymentResponse, WebhookEvent } from "../types/payment.types.js";
+
+import { prisma } from "../../../core/services/prisma.service.js";
+import { BadRequestError } from "../../../errors/bad-request.error.js";
+import { ConflictError } from "../../../errors/conflict.error.js";
+import { NotFoundError } from "../../../errors/not-found.error.js";
 
 class PaymentService {
   /**
    * Simulate initiating a payment
    */
   async initiatePayment(data: InitiatePaymentData): Promise<PaymentResponse> {
-    // Generate a reference
-    const reference = `REF-${randomBytes(4).toString("hex").toUpperCase()}-${Date.now()}`;
-    
-    // Simulate provider URL (in a real app, this comes from Paystack/Stripe)
-    const authorizationUrl = `https://checkout.simulated-pay.com/${reference}?amount=${data.amount}`;
+    return await prisma.$transaction(async (transaction) => {
+      const membership = await transaction.membership.findFirst({
+        where: {
+          id: data.membershipId,
+          profileId: data.profileId,
+        },
+        include: {
+          plan: {
+            select: {
+              price: true,
+              currency: true,
+            },
+          },
+        },
+      });
 
-    const payment = await prisma.payment.create({
-      data: {
-        profileId: data.profileId,
-        gymId: data.gymId,
-        membershipId: data.membershipId,
-        amount: data.amount,
-        currency: data.currency || "GHS",
-        reference,
-        provider: "SIMULATOR",
-        channel: data.channel || "mobile_money",
-        status: "PENDING",
-      },
+      if (!membership) {
+        throw new NotFoundError({ message: "Membership not found" });
+      }
+
+      if (membership.status === "ACTIVE") {
+        throw new ConflictError({ message: "Membership is already active" });
+      }
+
+      if (membership.status !== "PENDING") {
+        throw new NotFoundError({ message: "Membership not found" });
+      }
+
+      const lockedMembership = await transaction.membership.updateMany({
+        where: {
+          id: membership.id,
+          status: "PENDING",
+        },
+        data: { updatedAt: new Date() },
+      });
+
+      if (lockedMembership.count === 0) {
+        throw new NotFoundError({ message: "Membership not found" });
+      }
+
+      if (membership.plan.price <= 0) {
+        throw new BadRequestError({ message: "A payment requires a plan with a positive price" });
+      }
+
+      const pendingPayment = await transaction.payment.findFirst({
+        where: {
+          membershipId: membership.id,
+          status: "PENDING",
+        },
+        orderBy: { createdAt: "desc" },
+      });
+
+      const payment = pendingPayment ?? await transaction.payment.create({
+        data: {
+          profileId: data.profileId,
+          gymId: membership.gymId,
+          membershipId: membership.id,
+          amount: membership.plan.price,
+          currency: membership.plan.currency,
+          reference: `REF-${randomBytes(4).toString("hex").toUpperCase()}-${Date.now()}`,
+          provider: "SIMULATOR",
+          channel: data.channel || "mobile_money",
+          status: "PENDING",
+        },
+      });
+
+      return {
+        id: payment.id,
+        reference: payment.reference,
+        amount: payment.amount,
+        currency: payment.currency,
+        status: payment.status,
+        provider: payment.provider,
+        authorizationUrl: `https://checkout.simulated-pay.com/${payment.reference}?amount=${payment.amount}`,
+        createdAt: payment.createdAt,
+        updatedAt: payment.updatedAt,
+      };
     });
-
-    return {
-      id: payment.id,
-      reference: payment.reference,
-      amount: payment.amount,
-      currency: payment.currency,
-      status: payment.status,
-      provider: payment.provider,
-      authorizationUrl,
-      createdAt: payment.createdAt,
-      updatedAt: payment.updatedAt,
-    };
   }
 
   /**
@@ -73,33 +121,91 @@ class PaymentService {
   async handleWebhook(event: WebhookEvent): Promise<void> {
     if (event.event === "charge.success") {
       const { reference } = event.data;
-      
-      const payment = await prisma.payment.findUnique({
-        where: { reference },
-      });
-
-      if (!payment) {
-        // Log error but don't throw to avoid 500 to webhook caller
-        console.error(`Webhook error: Payment ${reference} not found`);
-        return;
-      }
-
-      if (payment.status !== "COMPLETED") {
-        // Update payment status
-        await prisma.payment.update({
-          where: { id: payment.id },
-          data: {
-            status: "COMPLETED",
-            paidAt: new Date(),
+      const paidAt = new Date();
+      await prisma.$transaction(async (transaction) => {
+        const payment = await transaction.payment.findUnique({
+          where: { reference },
+          include: {
+            membership: {
+              include: { plan: true },
+            },
           },
         });
 
-        // If linked to membership, activate it
-        if (payment.membershipId) {
-          await SubscriptionService.activateMembership(payment.membershipId, payment.id);
+        if (!payment) {
+          return;
         }
-      }
+
+        const completedPayment = await transaction.payment.updateMany({
+          where: {
+            id: payment.id,
+            status: "PENDING",
+          },
+          data: {
+            status: "COMPLETED",
+            paidAt,
+          },
+        });
+
+        if (completedPayment.count === 0) {
+          return;
+        }
+
+        if (!payment.membership) {
+          throw new BadRequestError({ message: "Payment is not linked to a membership" });
+        }
+
+        const startDate = paidAt;
+        const endDate = this.calculateEndDate(startDate, payment.membership.plan.duration, payment.membership.plan.durationUnit);
+        const activatedMembership = await transaction.membership.updateMany({
+          where: {
+            id: payment.membership.id,
+            status: "PENDING",
+          },
+          data: {
+            status: "ACTIVE",
+            startDate,
+            endDate,
+            lastPaymentId: payment.id,
+          },
+        });
+
+        if (activatedMembership.count === 0) {
+          const linkedMembership = await transaction.membership.findFirst({
+            where: {
+              id: payment.membership.id,
+              status: "ACTIVE",
+              lastPaymentId: payment.id,
+            },
+          });
+
+          if (!linkedMembership) {
+            throw new BadRequestError({ message: "Membership cannot be activated" });
+          }
+        }
+      });
     }
+  }
+
+  private calculateEndDate(startDate: Date, duration: number, durationUnit: "DAYS" | "WEEKS" | "MONTHS" | "YEARS"): Date {
+    const endDate = new Date(startDate);
+
+    switch (durationUnit) {
+      case "DAYS":
+        endDate.setDate(endDate.getDate() + duration);
+        break;
+      case "WEEKS":
+        endDate.setDate(endDate.getDate() + duration * 7);
+        break;
+      case "MONTHS":
+        endDate.setMonth(endDate.getMonth() + duration);
+        break;
+      case "YEARS":
+        endDate.setFullYear(endDate.getFullYear() + duration);
+        break;
+    }
+
+    return endDate;
   }
 
   /**
