@@ -13,6 +13,7 @@ import infoRoute from "./core/routes/info.route.js";
 import rootRoute from "./core/routes/root.route.js";
 import { NotFoundError } from "./errors/not-found.error.js";
 import { errorHandler } from "./middlewares/error-handler.middleware.js";
+import { PaymentController } from "./api/payments/index.js";
 
 const app: Express = express();
 
@@ -24,6 +25,7 @@ app.use(cors({
   credentials: true,
 }));
 app.use(morgan("combined"));
+app.post(`${API_PREFIXES.V1}/payments/webhook`, express.raw({ type: "application/json" }), PaymentController.webhook);
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 

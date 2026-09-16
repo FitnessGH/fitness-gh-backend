@@ -5,9 +5,6 @@ import PaymentController from "../controllers/payment.controller.js";
 
 class PaymentRoute extends BaseRoute {
   protected initializeRoutes(): void {
-    // Public Webhook (Simulated)
-    this.post("/webhook", PaymentController.webhook);
-
     // Protected Routes
     this.post("/initiate", authenticate, PaymentController.initiate);
     this.get("/verify/:reference", authenticate, PaymentController.verify);

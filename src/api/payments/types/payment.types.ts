@@ -33,10 +33,7 @@ export type WebhookEvent = {
   event: string; // e.g., "charge.success"
   data: {
     reference: string;
-    amount: number;
-    currency: string;
     status: string;
-    metadata?: Record<string, unknown>;
   };
 };
 
