@@ -1,10 +1,10 @@
-import { randomBytes } from "crypto";
-
-import { prisma } from "../../../core/services/prisma.service.js";
-import { ConflictError } from "../../../errors/conflict.error.js";
-import { NotFoundError } from "../../../errors/not-found.error.js";
+import { randomBytes } from "node:crypto";
 
 import type { InitiatePaymentData, PaymentResponse, VerifyPaymentResponse, WebhookEvent } from "../types/payment.types.js";
+
+import { prisma } from "../../../core/services/prisma.service.js";
+import { BadRequestError } from "../../../errors/bad-request.error.js";
+import { NotFoundError } from "../../../errors/not-found.error.js";
 
 class PaymentService {
   /**
@@ -15,6 +15,7 @@ class PaymentService {
       where: {
         id: data.membershipId,
         profileId: data.profileId,
+        status: "PENDING",
       },
       include: {
         plan: {
@@ -30,9 +31,13 @@ class PaymentService {
       throw new NotFoundError({ message: "Membership not found" });
     }
 
+    if (membership.plan.price <= 0) {
+      throw new BadRequestError({ message: "A payment requires a plan with a positive price" });
+    }
+
     // Generate a reference
     const reference = `REF-${randomBytes(4).toString("hex").toUpperCase()}-${Date.now()}`;
-    
+
     // Simulate provider URL (in a real app, this comes from Paystack/Stripe)
     const authorizationUrl = `https://checkout.simulated-pay.com/${reference}?amount=${membership.plan.price}`;
 
@@ -92,7 +97,7 @@ class PaymentService {
   async handleWebhook(event: WebhookEvent): Promise<void> {
     if (event.event === "charge.success") {
       const { reference } = event.data;
-      
+
       const payment = await prisma.payment.findUnique({
         where: { reference },
         include: {
@@ -143,7 +148,14 @@ class PaymentService {
         });
 
         if (activatedMembership.count === 0) {
-          throw new ConflictError({ message: "Membership cannot be activated" });
+          await transaction.membership.updateMany({
+            where: {
+              id: payment.membership.id,
+              status: "ACTIVE",
+              lastPaymentId: null,
+            },
+            data: { lastPaymentId: payment.id },
+          });
         }
       });
     }

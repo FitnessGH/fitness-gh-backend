@@ -1,5 +1,5 @@
 /* eslint-disable node/no-process-env */
-import { ValiError, minLength, number, object, optional, picklist, pipe, string, transform, parse } from "valibot";
+import { minLength, number, object, optional, parse, picklist, pipe, string, transform, ValiError } from "valibot";
 
 // Default secrets for development/test (DO NOT use in production!)
 const DEV_SECRET = "development-only-secret-key-min-32-characters-long";
@@ -33,6 +33,10 @@ function parseEnv() {
 
     if (parsedEnv.NODE_ENV === "production" && parsedEnv.PAYMENTS_PROVIDER === "simulator") {
       throw new Error("PAYMENTS_PROVIDER=simulator cannot be used in production");
+    }
+
+    if (parsedEnv.NODE_ENV === "production" && (parsedEnv.PAYMENTS_WEBHOOK_SECRET === DEV_SECRET || parsedEnv.PAYMENTS_WEBHOOK_SECRET.length < 32)) {
+      throw new Error("PAYMENTS_WEBHOOK_SECRET must be configured with at least 32 characters in production");
     }
 
     return parsedEnv;

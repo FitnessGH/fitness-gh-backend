@@ -6,6 +6,7 @@ import helmet from "helmet";
 import morgan from "morgan";
 
 import apiRoute from "./api/index.js";
+import { PaymentController } from "./api/payments/index.js";
 import { API_PREFIXES } from "./config/constants.config.js";
 import config from "./config/env.config.js";
 import healthStatusRoute from "./core/routes/health-check.route.js";
@@ -13,7 +14,6 @@ import infoRoute from "./core/routes/info.route.js";
 import rootRoute from "./core/routes/root.route.js";
 import { NotFoundError } from "./errors/not-found.error.js";
 import { errorHandler } from "./middlewares/error-handler.middleware.js";
-import { PaymentController } from "./api/payments/index.js";
 
 const app: Express = express();
 

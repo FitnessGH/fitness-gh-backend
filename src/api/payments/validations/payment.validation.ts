@@ -1,17 +1,20 @@
+import type { InferOutput } from "valibot";
+
 import {
+
   minLength,
   object,
   optional,
   picklist,
   pipe,
   record,
+  strictObject,
   string,
   unknown,
-  type InferOutput,
 } from "valibot";
 
 // Initiate payment schema
-export const initiatePaymentSchema = object({
+export const initiatePaymentSchema = strictObject({
   membershipId: pipe(
     string(),
     minLength(1, "Membership ID is required"),
