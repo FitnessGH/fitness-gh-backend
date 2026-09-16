@@ -1,0 +1,1844 @@
+openapi: 3.1.0
+info:
+  title: Fitness GH API
+  version: 1.0.0-draft
+  description: |
+    Multi-tenant REST API for gym management — organisations, gyms, staff, subscription plans,
+    memberships, check-ins, and payments.
+
+    > **This spec describes the TARGET contract**, not what the service currently returns. It is the
+    > contract to build against through Phases 1–6 of `docs/implementation-plan.md`. The live API today
+    > uses a `{ success, message, data }` envelope, has no pagination, and differs on several status
+    > codes — see `docs/codebase-review.md` (M-04, H-06). Keep this file in sync with every endpoint
+    > change from Phase 1 onward.
+
+    **Coverage:** auth, users, organisations, gyms, employees, plans, memberships, check-ins, payments,
+    uploads, roles/permissions, dashboard. **Not yet specified:** marketplace (blocked on decision D-2), classes, shifts,
+    equipment, invoices, audit log — add each as its phase lands.
+
+    ## Conventions
+    - **Envelopes**: success is `{ "data": … }`; collections add `"meta"`; errors are
+      `{ "error": { "code", "message", "details?" } }`. `code` is the stable machine-readable contract —
+      switch on it, never on `message`.
+    - **IDs** are UUIDv7 strings.
+    - **Money** is a decimal string in GH₵, e.g. `"250.00"` — never a JSON number (avoids float drift).
+    - **Timestamps** are ISO 8601 UTC.
+    - **Auth**: `Authorization: Bearer <accessToken>`. Obtain via `POST /auth/login`.
+    - **Multi-tenancy**: every gym endpoint is scoped to the caller's organisation, resolved from the JWT.
+      **Cross-tenant access returns 404, not 403** — a 403 would confirm the resource exists. Platform
+      users (`SUPER_ADMIN`, no organisation) must send `X-Organisation-Id` to act within one; the header
+      is **ignored** for organisation users.
+    - **Authorisation**: endpoints require a **permission** (`plan:write`, `checkin:write`, …), never a role
+      name. Permission keys are a fixed catalogue published by the API; **roles are data** — an organisation
+      owner creates and edits them via `/roles`, so which role holds which permission varies per tenant.
+      Roles have a scope: organisation-wide (applies at every gym) or gym-level. There is deliberately **no
+      rank ordering** — the seeded `trainer` and `receptionist` roles hold disjoint permissions. 403
+      `insufficient_permission` names the permission that was missing. Relationship rules ("your own
+      membership", "your assigned members") are enforced in the service layer on top of the permission gate.
+    - **Pagination**: every list endpoint. Offset (`page`, `perPage`, max 100) for tables; cursor
+      (`cursor`, `limit`) for logs.
+    - **Rate limits**: 100/min per user on `/api/*`; 10/min per IP on credential endpoints; 5/min on OTP.
+      `429` when exceeded.
+
+    ## Typical flow
+    1. `POST /auth/register` → `POST /auth/send-otp` → `POST /auth/verify-otp` → tokens
+    2. `POST /organisations` → creates the organisation, its first gym, and an `OWNER` employment
+    3. `POST /gyms/{gymId}/employees` → add a manager / receptionist
+    4. `POST /gyms/{gymId}/plans` → define what the gym sells
+    5. `POST /gyms/{gymId}/memberships` (staff) or `POST /gyms/{gymId}/memberships/self` (member) → `PENDING`
+    6. `POST /payments/initiate` → provider checkout → provider webhook → membership `ACTIVE`
+    7. `POST /gyms/{gymId}/check-ins` → daily operation
+    8. `GET /gyms/{gymId}/dashboard` → the owner's view
+
+servers:
+  - url: /api/v1
+    description: Same origin
+  - url: http://localhost:5001/api/v1
+    description: Local development
+
+tags:
+  - name: Meta
+    description: Unversioned service endpoints (no auth, no rate limit)
+  - name: Auth
+  - name: Users
+  - name: Organisations
+  - name: Gyms
+    description: Gym profiles and the public directory
+  - name: Employees
+    description: Staff of a gym, with per-gym roles
+  - name: Plans
+    description: Gym-defined subscription plans
+  - name: Memberships
+  - name: Check-ins
+  - name: Payments
+  - name: Roles
+    description: Data-driven roles over a code-owned permission catalogue
+  - name: Uploads
+  - name: Reporting
+
+security:
+  - bearerAuth: []
+
+paths:
+  # ─────────────────────────────── Auth ───────────────────────────────
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Create an account and profile
+      description: |
+        Creates the account and profile only. **Does not create a gym** — self-enrolment is
+        `POST /organisations`, so that address details are required rather than placeholdered.
+        Returns no tokens until the email is verified.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email, password, username]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 12 }
+                username: { type: string, minLength: 3, maxLength: 30 }
+                firstName: { type: string }
+                lastName: { type: string }
+                phone: { type: string }
+      responses:
+        '201':
+          description: Created; awaiting email verification
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      account: { $ref: '#/components/schemas/Account' }
+                      verificationRequired: { type: boolean, const: true }
+        '409':
+          description: |
+            Email, username, or phone already taken. `code` is `email_taken` / `username_taken` /
+            `phone_taken`. Note: distinct codes make accounts enumerable, so this endpoint is
+            rate-limited at 10/min per IP.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Exchange credentials for tokens
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+      responses:
+        '200':
+          description: Authenticated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/AuthSession' }
+        '401':
+          description: Bad credentials, unverified email, or deactivated account. Always `invalid_credentials` for a bad email or password — never distinguish the two.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Rotate the refresh token
+      description: The presented refresh token is revoked and a new pair issued. Reuse of a revoked token is rejected.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string }
+      responses:
+        '200':
+          description: Rotated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Tokens' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Revoke one refresh token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [refreshToken]
+              properties: { refreshToken: { type: string } }
+      responses:
+        '204': { description: Revoked (idempotent — unknown tokens also return 204) }
+
+  /auth/logout-all:
+    post:
+      tags: [Auth]
+      summary: Revoke every refresh token for the caller
+      responses:
+        '204': { description: All sessions revoked }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /auth/send-otp:
+    post:
+      tags: [Auth]
+      summary: Send an email verification code
+      description: 5/min per IP+email, 20/day. The code is single-use, expires in 10 minutes, and is attempt-capped at 5 tries.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email]
+              properties: { email: { type: string, format: email } }
+      responses:
+        '202':
+          description: |
+            Accepted. The response is identical whether or not the address has an account —
+            it must not be an account-existence oracle.
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /auth/verify-otp:
+    post:
+      tags: [Auth]
+      summary: Verify an email code and receive tokens
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email, otp]
+              properties:
+                email: { type: string, format: email }
+                otp: { type: string, pattern: '^\d{6}$' }
+      responses:
+        '200':
+          description: Verified
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { data: { $ref: '#/components/schemas/AuthSession' } }
+        '401':
+          description: Invalid or expired code (`invalid_otp`)
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '429':
+          description: Attempt cap reached for this code (`otp_attempts_exceeded`) or rate limited
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
+  /auth/change-password:
+    post:
+      tags: [Auth]
+      summary: Change own password
+      description: Revokes every refresh token on success.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword: { type: string }
+                newPassword: { type: string, minLength: 12 }
+      responses:
+        '204': { description: Changed; all sessions revoked }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /auth/forgot-password:
+    post:
+      tags: [Auth]
+      summary: Request a password reset link
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email]
+              properties: { email: { type: string, format: email } }
+      responses:
+        '202': { description: Accepted — response is identical whether or not the account exists }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /auth/reset-password:
+    post:
+      tags: [Auth]
+      summary: Complete a password reset
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [token, newPassword]
+              properties:
+                token: { type: string }
+                newPassword: { type: string, minLength: 12 }
+      responses:
+        '204': { description: Reset; all sessions revoked }
+        '401': { description: Invalid or expired token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  # ─────────────────────────────── Users ───────────────────────────────
+  /users/me:
+    get:
+      tags: [Users]
+      summary: The authenticated account, profile, and gym roles
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      account: { $ref: '#/components/schemas/Account' }
+                      profile: { $ref: '#/components/schemas/Profile' }
+                      organisationId: { type: [string, 'null'], format: uuid }
+                      orgRole:
+                        oneOf: [{ $ref: '#/components/schemas/Role' }, { type: 'null' }]
+                      gymRoles:
+                        type: array
+                        description: |
+                          The caller's active employments, with the resolved permission set per gym — what the
+                          UI uses to decide what to render. Sending permissions (not just roles) means the
+                          frontend never reimplements the role→permission map.
+                        items:
+                          type: object
+                          properties:
+                            gymId: { type: string, format: uuid }
+                            role: { $ref: '#/components/schemas/Role' }
+                            permissions: { type: array, items: { $ref: '#/components/schemas/Permission' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    patch:
+      tags: [Users]
+      summary: Update own profile
+      description: The only way a user edits a profile. `PATCH /users/{profileId}` is `SUPER_ADMIN`-only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                firstName: { type: string }
+                lastName: { type: string }
+                avatarUrl: { type: string, format: uri }
+                height: { type: number, description: cm }
+                weight: { type: number, description: kg }
+                age: { type: integer }
+                gender: { type: string, enum: [MALE, FEMALE, OTHER] }
+                preferences: { $ref: '#/components/schemas/Preferences' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { type: object, properties: { data: { $ref: '#/components/schemas/Profile' } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /users/me/memberships:
+    get:
+      tags: [Users, Memberships]
+      summary: The caller's memberships across all gyms
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+        - name: status
+          in: query
+          schema: { type: string, description: Comma-separated MembershipStatus values }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - properties:
+                      data: { type: array, items: { $ref: '#/components/schemas/Membership' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /users/{profileId}:
+    parameters:
+      - $ref: '#/components/parameters/ProfileId'
+    get:
+      tags: [Users]
+      summary: A user's public profile
+      description: |
+        Authenticated. Returns the **public projection only** — never body metrics (`height`, `weight`,
+        `age`, `gender`), `preferences`, `email`, or `phone`.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, properties: { data: { $ref: '#/components/schemas/PublicProfile' } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ────────────────────────── Organisations ──────────────────────────
+  /organisations:
+    post:
+      tags: [Organisations]
+      summary: Self-enrol — create an organisation with its first gym
+      description: |
+        One transaction: creates the organisation, its first gym, and an `OWNER` employment for the
+        caller. Address details are **required** — there is no placeholder path. The slug is derived
+        from the name with collision retry, not a timestamp suffix.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name, gym]
+              properties:
+                name: { type: string, minLength: 2 }
+                gym:
+                  type: object
+                  additionalProperties: false
+                  required: [name, address, city, region]
+                  properties:
+                    name: { type: string }
+                    address: { type: string }
+                    city: { type: string }
+                    region: { type: string }
+                    country: { type: string, default: Ghana }
+                    phone: { type: string }
+                    email: { type: string, format: email }
+      responses:
+        '201':
+          description: Created
+          headers:
+            Location: { schema: { type: string }, description: 'URL of the created organisation' }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      organisation: { $ref: '#/components/schemas/Organisation' }
+                      gym: { $ref: '#/components/schemas/Gym' }
+        '409': { description: 'Slug or organisation name already taken (`slug_taken`)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /organisations/me:
+    get:
+      tags: [Organisations]
+      summary: The caller's organisation
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, properties: { data: { $ref: '#/components/schemas/Organisation' } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: 'Account is not attached to an organisation (`no_organisation`)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  # ─────────────────────────────── Gyms ───────────────────────────────
+  /public/gyms:
+    get:
+      tags: [Gyms]
+      summary: Public gym directory
+      description: Public and paginated. Excludes archived and inactive gyms, and gyms with incomplete onboarding. Returns the narrow public projection only.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+        - { name: city, in: query, schema: { type: string } }
+        - { name: region, in: query, schema: { type: string } }
+        - { name: q, in: query, schema: { type: string, maxLength: 60 }, description: Name search }
+        - { name: sort, in: query, schema: { type: string, enum: [name, -name, -createdAt] } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - properties:
+                      data: { type: array, items: { $ref: '#/components/schemas/PublicGym' } }
+
+  /public/gyms/by-slug/{slug}:
+    parameters:
+      - { name: slug, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Gyms]
+      summary: Public gym detail by slug
+      description: |
+        Under `/by-slug/` rather than `/gyms/{slug}` so the single-segment namespace stays available
+        for real routes. Archived and inactive gyms return 404.
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, properties: { data: { $ref: '#/components/schemas/PublicGym' } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /public/gyms/{gymId}/plans:
+    parameters:
+      - $ref: '#/components/parameters/GymId'
+    get:
+      tags: [Gyms, Plans]
+      summary: Publicly browsable plans for a gym
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: OK — active, unarchived plans only
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - properties:
+                      data: { type: array, items: { $ref: '#/components/schemas/Plan' } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /gyms:
+    get:
+      tags: [Gyms]
+      summary: Gyms in the caller's organisation
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - properties:
+                      data: { type: array, items: { $ref: '#/components/schemas/Gym' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Gyms]
+      summary: Add another gym to the organisation
+      description: 'Requires `gym:write` at organisation level (org `OWNER` or `ADMIN`).'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GymInput' }
+      responses:
+        '201':
+          description: Created
+          headers:
+            Location: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { type: object, properties: { data: { $ref: '#/components/schemas/Gym' } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { description: 'Slug taken', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /gyms/{gymId}:
+    parameters:
+      - $ref: '#/components/parameters/GymId'
+    get:
+      tags: [Gyms]
+      summary: Full gym record
+      description: 'Requires `gym:read`.'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, properties: { data: { $ref: '#/components/schemas/Gym' } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Gyms]
+      summary: Update gym profile
+      description: 'Requires `gym:write`.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/GymInput'
+                - type: object
+                  properties:
+                    operatingHours: { $ref: '#/components/schemas/OperatingHours' }
+                    settings: { $ref: '#/components/schemas/GymSettings' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { type: object, properties: { data: { $ref: '#/components/schemas/Gym' } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Gyms]
+      summary: Archive a gym
+      description: 'Soft delete — sets `archivedAt`, retains all history. Requires `gym:archive` (organisation `OWNER` only).'
+      responses:
+        '204': { description: Archived }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: 'Last active gym in the organisation (`last_gym`)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  # ───────────────────────────── Employees ─────────────────────────────
+  /gyms/{gymId}/employees:
+    parameters:
+      - $ref: '#/components/parameters/GymId'
+    get:
+      tags: [Employees]
+      summary: Staff of a gym
+      description: 'Requires `staff:read`.'
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+        - { name: roleId, in: query, schema: { type: string, format: uuid }, description: Filter by assigned role }
+        - { name: isActive, in: query, schema: { type: boolean } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - properties:
+                      data: { type: array, items: { $ref: '#/components/schemas/Employment' } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Employees]
+      summary: Add or invite an employee by email
+      description: |
+        If the email has an account, the employment is created immediately. If not, a pending invite is
+        Requires `staff:write`. A caller may only grant a role whose permission set is a **subset of
+        their own** (`canGrant` in `src/core/permissions.ts`) — that is what prevents escalation, rather
+        than a rank comparison.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email, roleId]
+              properties:
+                email: { type: string, format: email }
+                roleId:
+                  type: string
+                  format: uuid
+                  description: A `GYM`-scoped role available to this organisation (system or custom).
+      responses:
+        '201':
+          description: Employed or invited
+          content:
+            application/json:
+              schema: { type: object, properties: { data: { $ref: '#/components/schemas/Employment' } } }
+        '403':
+          description: 'Insufficient role, or attempting to grant a role above your own (`role_escalation`)'
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: 'Already employed at this gym (`already_employed`)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /gyms/{gymId}/employees/{employmentId}:
+    parameters:
+      - $ref: '#/components/parameters/GymId'
+      - { name: employmentId, in: path, required: true, schema: { type: string, format: uuid } }
+    patch:
+      tags: [Employees]
+      summary: Change an employee's role or status
+      description: |
+        **Scoped by `gymId`** — an employment belonging to another gym returns 404, even if the caller
+        manages the gym named in the path. (This is the shape of finding C-04.)
+        Requires `staff:write`, and the target role's permissions must be a subset of the caller's.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                roleId: { type: string, format: uuid }
+                isActive: { type: boolean }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { type: object, properties: { data: { $ref: '#/components/schemas/Employment' } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: 'Would demote the last OWNER (`last_owner`)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    delete:
+      tags: [Employees]
+      summary: End an employment
+      description: 'Retains the record and stamps `endDate`. Requires `staff:write`. Scoped by `gymId`.'
+      responses:
+        '204': { description: Ended }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: 'Would remove the last OWNER (`last_owner`)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  # ─────────────────────────────── Plans ───────────────────────────────
+  /gyms/{gymId}/plans:
+    parameters:
+      - $ref: '#/components/parameters/GymId'
+    get:
+      tags: [Plans]
+      summary: A gym's plans, including archived
+      description: 'Requires `plan:read`.'
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+        - { name: includeArchived, in: query, schema: { type: boolean, default: false } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - properties: { data: { type: array, items: { $ref: '#/components/schemas/Plan' } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Plans]
+      summary: Create a plan
+      description: 'Requires `plan:write`.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PlanInput' }
+      responses:
+        '201':
+          description: Created
+          headers: { Location: { schema: { type: string } } }
+          content:
+            application/json:
+              schema: { type: object, properties: { data: { $ref: '#/components/schemas/Plan' } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { description: 'Plan name already used at this gym (`plan_name_taken`)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /gyms/{gymId}/plans/{planId}:
+    parameters:
+      - $ref: '#/components/parameters/GymId'
+      - { name: planId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Plans]
+      summary: Plan detail
+      description: 'Scoped by `gymId`. Requires `plan:read`.'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, properties: { data: { $ref: '#/components/schemas/Plan' } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Plans]
+      summary: Update a plan
+      description: |
+        Scoped by `gymId`. Requires `plan:write`. **Existing memberships are unaffected** — they hold a
+        price snapshot taken at enrolment, so editing a plan changes only the current offer.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PlanInput' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { type: object, properties: { data: { $ref: '#/components/schemas/Plan' } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Plans]
+      summary: Archive a plan
+      description: 'Soft delete. Existing memberships continue to their end date. Requires `plan:archive`.'
+      responses:
+        '204': { description: Archived }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ──────────────────────────── Memberships ────────────────────────────
+  /gyms/{gymId}/memberships:
+    parameters:
+      - $ref: '#/components/parameters/GymId'
+    get:
+      tags: [Memberships]
+      summary: A gym's members
+      description: |
+        Requires `membership:read`. A caller whose only permission comes from the `TRAINER` role sees
+        **only members assigned to them** — the permission opens the endpoint, the service narrows the rows.
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+        - { name: status, in: query, schema: { type: string }, description: Comma-separated MembershipStatus values }
+        - { name: planId, in: query, schema: { type: string, format: uuid } }
+        - { name: 'endDate[lte]', in: query, schema: { type: string, format: date }, description: For "expiring soon" views }
+        - { name: q, in: query, schema: { type: string, maxLength: 60 }, description: Member name or username }
+        - { name: sort, in: query, schema: { type: string, enum: [-createdAt, createdAt, endDate, -endDate, status] } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - properties: { data: { type: array, items: { $ref: '#/components/schemas/Membership' } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Memberships]
+      summary: Enrol a member (staff)
+      description: |
+        Creates a `PENDING` membership for the given email and snapshots the plan's terms.
+        Requires `membership:write`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email, planId]
+              properties:
+                email: { type: string, format: email }
+                planId: { type: string, format: uuid }
+                startDate: { type: string, format: date }
+                autoRenew: { type: boolean, default: false }
+      responses:
+        '201':
+          description: Created — `PENDING` until paid
+          headers: { Location: { schema: { type: string } } }
+          content:
+            application/json:
+              schema: { type: object, properties: { data: { $ref: '#/components/schemas/Membership' } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { description: 'No account for that email, or the plan is not this gym''s', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '409': { description: 'The member already has a live membership at this gym (`membership_exists`)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /gyms/{gymId}/memberships/self:
+    parameters:
+      - $ref: '#/components/parameters/GymId'
+    post:
+      tags: [Memberships]
+      summary: Self-enrol in a plan
+      description: |
+        Any authenticated user; no gym role required. `profileId` comes from the token — never the body.
+        Renewal after expiry or cancellation is allowed and creates a **new** membership row, preserving
+        history.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [planId]
+              properties:
+                planId: { type: string, format: uuid }
+                autoRenew: { type: boolean, default: false }
+      responses:
+        '201':
+          description: Created — `PENDING` until paid
+          headers: { Location: { schema: { type: string } } }
+          content:
+            application/json:
+              schema: { type: object, properties: { data: { $ref: '#/components/schemas/Membership' } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: 'Already has a live membership at this gym (`membership_exists`)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /gyms/{gymId}/memberships/{membershipId}:
+    parameters:
+      - $ref: '#/components/parameters/GymId'
+      - $ref: '#/components/parameters/MembershipId'
+    get:
+      tags: [Memberships]
+      summary: Membership detail
+      description: 'Scoped by `gymId`. Requires `membership:read`, or the caller is the member.'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, properties: { data: { $ref: '#/components/schemas/Membership' } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Memberships]
+      summary: Update a membership
+      description: |
+        Scoped by `gymId`. Requires `membership:write`. **`status` is not settable here** — use the
+        transition endpoints below, which enforce the state machine. Activation requires a completed
+        payment and is never a direct write.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                autoRenew: { type: boolean }
+                endDate: { type: string, format: date-time, description: Manual adjustment; audit-logged }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { type: object, properties: { data: { $ref: '#/components/schemas/Membership' } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /gyms/{gymId}/memberships/{membershipId}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/GymId'
+      - $ref: '#/components/parameters/MembershipId'
+    post:
+      tags: [Memberships]
+      summary: Cancel a membership
+      description: 'Legal from `PENDING` or `ACTIVE`. Requires `membership:write`, or the caller is the member. Stamps `cancelledAt` and clears `autoRenew`.'
+      responses:
+        '200':
+          description: Cancelled
+          content:
+            application/json:
+              schema: { type: object, properties: { data: { $ref: '#/components/schemas/Membership' } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/IllegalTransition' }
+
+  /gyms/{gymId}/memberships/{membershipId}/suspend:
+    parameters:
+      - $ref: '#/components/parameters/GymId'
+      - $ref: '#/components/parameters/MembershipId'
+    post:
+      tags: [Memberships]
+      summary: Suspend an active membership
+      description: 'Legal from `ACTIVE` only. Requires `membership:suspend`.'
+      responses:
+        '200':
+          description: Suspended
+          content:
+            application/json:
+              schema: { type: object, properties: { data: { $ref: '#/components/schemas/Membership' } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/IllegalTransition' }
+
+  /gyms/{gymId}/memberships/{membershipId}/reinstate:
+    parameters:
+      - $ref: '#/components/parameters/GymId'
+      - $ref: '#/components/parameters/MembershipId'
+    post:
+      tags: [Memberships]
+      summary: Reinstate a suspended membership
+      description: 'Legal from `SUSPENDED` only. Requires `membership:suspend`.'
+      responses:
+        '200':
+          description: Reinstated
+          content:
+            application/json:
+              schema: { type: object, properties: { data: { $ref: '#/components/schemas/Membership' } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/IllegalTransition' }
+
+  # ───────────────────────────── Check-ins ─────────────────────────────
+  /gyms/{gymId}/check-ins:
+    parameters:
+      - $ref: '#/components/parameters/GymId'
+    get:
+      tags: [Check-ins]
+      summary: Check-in history
+      description: 'Cursor-paginated append-only log. Requires `checkin:read`.'
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - { name: membershipId, in: query, schema: { type: string, format: uuid } }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/CursorEnvelope'
+                  - properties: { data: { type: array, items: { $ref: '#/components/schemas/CheckIn' } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Check-ins]
+      summary: Check a member in
+      description: |
+        One transaction: validates the membership is `ACTIVE` and unexpired, enforces the plan's visit
+        cap with a guarded increment, and appends the log row. Requires `checkin:write`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [membershipId]
+              properties:
+                membershipId: { type: string, format: uuid }
+                method: { type: string, enum: [MANUAL, QR, CARD], default: MANUAL }
+      responses:
+        '201':
+          description: Checked in
+          content:
+            application/json:
+              schema: { type: object, properties: { data: { $ref: '#/components/schemas/CheckIn' } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: |
+            Membership not active (`membership_not_active`), expired (`membership_expired`), or the
+            plan's visit cap is reached (`visit_cap_reached`).
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /gyms/{gymId}/check-ins/{checkInId}/check-out:
+    parameters:
+      - $ref: '#/components/parameters/GymId'
+      - { name: checkInId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [Check-ins]
+      summary: Stamp a check-out
+      description: 'Requires `checkin:write`. Idempotent — a second call returns the existing `checkedOutAt`.'
+      responses:
+        '200':
+          description: Checked out
+          content:
+            application/json:
+              schema: { type: object, properties: { data: { $ref: '#/components/schemas/CheckIn' } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ───────────────────────────── Payments ─────────────────────────────
+  /payments/initiate:
+    post:
+      tags: [Payments]
+      summary: Start a payment for a membership
+      description: |
+        **The amount is derived server-side** from the membership's snapshotted plan price. There is no
+        `amount` field in this request body, deliberately — accepting one was finding C-01. The
+        `membershipId` must belong to the caller's profile; anything else returns 404.
+
+        Pass `Idempotency-Key` to make retries safe.
+      parameters:
+        - { name: Idempotency-Key, in: header, schema: { type: string }, description: Recommended; makes retries safe }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [membershipId]
+              properties:
+                membershipId: { type: string, format: uuid }
+                channel: { type: string, enum: [MOBILE_MONEY, CARD] }
+      responses:
+        '201':
+          description: Payment created; redirect the user to `authorizationUrl`
+          headers: { Location: { schema: { type: string } } }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    allOf:
+                      - $ref: '#/components/schemas/Payment'
+                      - type: object
+                        properties:
+                          authorizationUrl: { type: string, format: uri }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { description: 'Membership not found or not the caller''s', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '409': { description: 'Membership already active (`membership_already_active`)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /payments/webhook:
+    post:
+      tags: [Payments]
+      summary: Provider callback
+      description: |
+        **Signature-verified and idempotent.** The raw body is HMAC-verified against the provider secret;
+        an unsigned or mismatched request is rejected with 401 and logged. A replayed `reference` is a
+        no-op. This endpoint is never a way for a client to mark a payment complete.
+      security: []
+      parameters:
+        - { name: X-Signature, in: header, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        description: Provider-specific payload, parsed by the configured provider adapter.
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '204': { description: Processed, or already processed }
+        '401': { description: 'Missing or invalid signature (`invalid_signature`)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /payments/me:
+    get:
+      tags: [Payments]
+      summary: The caller's payment history
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+        - { name: status, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - properties: { data: { type: array, items: { $ref: '#/components/schemas/Payment' } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /gyms/{gymId}/payments:
+    parameters:
+      - $ref: '#/components/parameters/GymId'
+    get:
+      tags: [Payments]
+      summary: A gym's payments
+      description: 'Requires `payment:read`.'
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+        - { name: status, in: query, schema: { type: string } }
+        - { name: 'createdAt[gte]', in: query, schema: { type: string, format: date } }
+        - { name: 'createdAt[lte]', in: query, schema: { type: string, format: date } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - properties: { data: { type: array, items: { $ref: '#/components/schemas/Payment' } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ───────────────────────────── Reporting ─────────────────────────────
+  /gyms/{gymId}/dashboard:
+    parameters:
+      - $ref: '#/components/parameters/GymId'
+    get:
+      tags: [Reporting]
+      summary: Gym KPIs
+      description: 'One transaction of counts. Requires `report:read`.'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      activeMembers: { type: integer }
+                      expiringIn7Days: { type: integer }
+                      newMembersThisMonth: { type: integer }
+                      checkInsToday: { type: integer }
+                      currentlyIn: { type: integer }
+                      revenueThisMonth: { $ref: '#/components/schemas/Money' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ─────────────────────────── Roles & permissions ───────────────────────────
+  /permissions:
+    get:
+      tags: [Roles]
+      summary: The permission catalogue
+      description: |
+        The fixed, code-owned set of permissions this API can enforce, grouped by resource with display
+        labels — what the role editor renders as a resource × action matrix. Read-only: permissions are
+        added by a release, never by a tenant.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        key: { $ref: '#/components/schemas/Permission' }
+                        resource: { type: string, examples: ['plan'] }
+                        action: { type: string, examples: ['write'] }
+                        label: { type: string, examples: ['Create and edit plans'] }
+                        description: { type: [string, 'null'] }
+                        deprecatedAt: { type: [string, 'null'], format: date-time }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /roles:
+    get:
+      tags: [Roles]
+      summary: Roles assignable in the caller's organisation
+      description: 'System roles plus the organisation''s own. Requires `role:read`.'
+      parameters:
+        - { name: scope, in: query, schema: { $ref: '#/components/schemas/RoleScope' } }
+        - { name: includeArchived, in: query, schema: { type: boolean, default: false } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { data: { type: array, items: { $ref: '#/components/schemas/Role' } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Roles]
+      summary: Create a custom role
+      description: |
+        Requires `role:write`. **A caller may only grant permissions they already hold** — otherwise 403
+        `role_escalation`. Prefer `cloneFrom` to start from a system role rather than an empty set.
+        Unknown permission keys are rejected with 422.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name, scope]
+              properties:
+                name: { type: string, minLength: 2 }
+                description: { type: string }
+                scope: { $ref: '#/components/schemas/RoleScope' }
+                cloneFrom:
+                  type: string
+                  description: '`key` of a system role to copy permissions from, e.g. `trainer`.'
+                permissions:
+                  type: array
+                  items: { $ref: '#/components/schemas/Permission' }
+                  description: Replaces the cloned set when both are given.
+      responses:
+        '201':
+          description: Created
+          headers: { Location: { schema: { type: string } } }
+          content:
+            application/json:
+              schema: { type: object, properties: { data: { $ref: '#/components/schemas/Role' } } }
+        '403':
+          description: 'Insufficient permission, or granting a permission the caller lacks (`role_escalation`)'
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '409': { description: 'Role name already used in this organisation (`role_name_taken`)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { description: 'Unknown permission key (`unknown_permission`)', content: { application/json: { schema: { $ref: '#/components/schemas/ValidationErrorBody' } } } }
+
+  /roles/{roleId}:
+    parameters:
+      - { name: roleId, in: path, required: true, schema: { type: string, format: uuid } }
+    patch:
+      tags: [Roles]
+      summary: Edit a custom role
+      description: |
+        Requires `role:write`. **System roles are immutable** (409 `system_role`) — clone them instead.
+        The caller may only add permissions they hold, and may not remove `role:write` or `staff:write`
+        from the organisation's last principal holding them (409 `would_lock_out`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                name: { type: string }
+                description: { type: string }
+                permissions: { type: array, items: { $ref: '#/components/schemas/Permission' } }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { type: object, properties: { data: { $ref: '#/components/schemas/Role' } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: 'System role (`system_role`), or the edit would lock the organisation out (`would_lock_out`)'
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '422': { description: 'Unknown permission key (`unknown_permission`)', content: { application/json: { schema: { $ref: '#/components/schemas/ValidationErrorBody' } } } }
+    delete:
+      tags: [Roles]
+      summary: Archive a custom role
+      description: 'Requires `role:write`. A role with live assignments must be reassigned first.'
+      responses:
+        '204': { description: Archived }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: 'System role (`system_role`), or the role still has assignments (`role_in_use`)'
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
+  # ────────────────────────────── Uploads ──────────────────────────────
+  /uploads:
+    post:
+      tags: [Uploads]
+      summary: Upload an image
+      description: |
+        Raw image body, max 5 MB. The MIME type is verified from the file's **magic bytes**, not the
+        `Content-Type` header, and the stored key is generated server-side — the client filename is not
+        used in the key. `purpose` decides the storage prefix. Rate limited to 10/min per user.
+      parameters:
+        - name: purpose
+          in: query
+          required: true
+          schema: { type: string, enum: [avatar, gym-logo, gym-cover, product] }
+        - name: gymId
+          in: query
+          schema: { type: string, format: uuid }
+          description: Required for `gym-logo` and `gym-cover`; the caller must be `MANAGER` at that gym.
+      requestBody:
+        required: true
+        content:
+          image/jpeg: { schema: { type: string, format: binary } }
+          image/png: { schema: { type: string, format: binary } }
+          image/webp: { schema: { type: string, format: binary } }
+      responses:
+        '201':
+          description: Uploaded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties: { url: { type: string, format: uri } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '413': { description: 'File exceeds 5 MB (`file_too_large`)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { description: 'Not a supported image (`invalid_file_type`) — determined by magic bytes', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Access token from `POST /auth/login`. Claims: `sub` (accountId), `profileId`,
+        `organisationId` (null for platform users), `platformRole`. **Per-gym roles are not in the
+        token** — they are resolved per request so a demotion takes effect immediately.
+
+  parameters:
+    GymId:
+      { name: gymId, in: path, required: true, schema: { type: string, format: uuid } }
+    ProfileId:
+      { name: profileId, in: path, required: true, schema: { type: string, format: uuid } }
+    MembershipId:
+      { name: membershipId, in: path, required: true, schema: { type: string, format: uuid } }
+    Page:
+      { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+    PerPage:
+      name: perPage
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      description: Capped at 100 — a client cannot request an unbounded list.
+    Cursor:
+      { name: cursor, in: query, schema: { type: string, format: uuid }, description: Id of the last item from the previous page }
+    Limit:
+      { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+
+  responses:
+    Unauthorized:
+      description: Missing, invalid, or expired token (`unauthorized`)
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Forbidden:
+      description: |
+        Authenticated and in the right organisation, but the caller's gym role is too low
+        (`forbidden`). **Never returned for cross-tenant access** — that is a 404.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    NotFound:
+      description: |
+        Does not exist, **or belongs to another organisation/gym** (`not_found`). The two are
+        deliberately indistinguishable so resource ids cannot be enumerated across tenants.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    ValidationError:
+      description: Valid JSON, invalid data (`validation_error`) — with field-level details
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ValidationErrorBody' }
+    IllegalTransition:
+      description: The requested state transition is not legal from the current status (`illegal_transition`)
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    RateLimited:
+      description: Rate limit exceeded (`rate_limit_exceeded`)
+      headers:
+        Retry-After: { schema: { type: integer } }
+        RateLimit-Remaining: { schema: { type: integer } }
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
+  schemas:
+    Money:
+      type: string
+      pattern: '^\d+\.\d{2}$'
+      examples: ['250.00']
+      description: Decimal string in GH₵. Never a JSON number — `Decimal(10,2)` in Postgres.
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: Stable machine-readable identifier. Switch on this, never on `message`.
+            message: { type: string, description: Human-readable; may change without notice }
+            details: { description: Present on validation errors }
+            requestId: { type: string, description: Present on 500s, for log correlation }
+
+    ValidationErrorBody:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string, const: validation_error }
+            message: { type: string }
+            details:
+              type: array
+              items:
+                type: object
+                properties:
+                  field: { type: string, examples: ['gym.city'] }
+                  message: { type: string }
+                  code: { type: string }
+
+    PaginatedEnvelope:
+      type: object
+      required: [data, meta]
+      properties:
+        data: { type: array, items: {} }
+        meta:
+          type: object
+          required: [total, page, perPage, totalPages]
+          properties:
+            total: { type: integer }
+            page: { type: integer }
+            perPage: { type: integer }
+            totalPages: { type: integer }
+
+    CursorEnvelope:
+      type: object
+      required: [data, meta]
+      properties:
+        data: { type: array, items: {} }
+        meta:
+          type: object
+          required: [hasNext]
+          properties:
+            nextCursor: { type: [string, 'null'], format: uuid }
+            hasNext: { type: boolean }
+
+    PlatformRole:
+      type: string
+      enum: [SUPER_ADMIN, USER]
+
+    Permission:
+      type: string
+      description: |
+        A `resource:action` key from the API's fixed catalogue (`GET /permissions`). Code-owned: a
+        permission exists only if some route enforces it.
+      examples: ['plan:write', 'checkin:write', 'payment:collect']
+
+    RoleScope:
+      type: string
+      enum: [ORGANISATION, GYM]
+      description: Where a role may be assigned. Organisation-scoped roles apply at every gym in the organisation.
+
+    Role:
+      type: object
+      description: |
+        A named permission set. **Data, not an enum** — an organisation owner can create and edit roles.
+        `organisationId: null` marks a seeded system role (`owner`, `admin`, `manager`, `receptionist`,
+        `trainer`, `staff`): shared, immutable, and the thing you clone to customise.
+      properties:
+        id: { type: string, format: uuid }
+        organisationId:
+          type: [string, 'null']
+          format: uuid
+          description: Null for a system role.
+        key: { type: string, examples: ['manager'], description: Stable identifier; used in seeds and tests }
+        name: { type: string, description: Editable display name }
+        description: { type: [string, 'null'] }
+        scope: { $ref: '#/components/schemas/RoleScope' }
+        isSystem: { type: boolean, description: Immutable and undeletable when true }
+        permissions: { type: array, items: { $ref: '#/components/schemas/Permission' } }
+        assignedCount: { type: integer, description: Live assignments — a role with any cannot be archived }
+        archivedAt: { type: [string, 'null'], format: date-time }
+
+    MembershipStatus:
+      type: string
+      enum: [PENDING, ACTIVE, EXPIRED, CANCELLED, SUSPENDED]
+
+    PaymentStatus:
+      type: string
+      enum: [PENDING, COMPLETED, FAILED, REFUNDED]
+
+    DurationUnit:
+      type: string
+      enum: [DAYS, WEEKS, MONTHS, YEARS]
+
+    Account:
+      type: object
+      description: Never includes `passwordHash`.
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        phone: { type: [string, 'null'] }
+        emailVerified: { type: boolean }
+        phoneVerified: { type: boolean }
+        platformRole: { $ref: '#/components/schemas/PlatformRole' }
+        isActive: { type: boolean }
+        lastLoginAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
+
+    Profile:
+      type: object
+      description: The caller's own profile. Body metrics are private to the owner.
+      properties:
+        id: { type: string, format: uuid }
+        username: { type: string }
+        firstName: { type: [string, 'null'] }
+        lastName: { type: [string, 'null'] }
+        avatarUrl: { type: [string, 'null'], format: uri }
+        height: { type: [number, 'null'] }
+        weight: { type: [number, 'null'] }
+        age: { type: [integer, 'null'] }
+        gender: { type: [string, 'null'], enum: [MALE, FEMALE, OTHER, null] }
+        preferences: { $ref: '#/components/schemas/Preferences' }
+        createdAt: { type: string, format: date-time }
+
+    PublicProfile:
+      type: object
+      description: |
+        What other users see. **Deliberately excludes** `height`, `weight`, `age`, `gender`,
+        `preferences`, `email`, and `phone` — exposing those was finding C-05.
+      properties:
+        id: { type: string, format: uuid }
+        username: { type: string }
+        firstName: { type: [string, 'null'] }
+        lastName: { type: [string, 'null'] }
+        avatarUrl: { type: [string, 'null'], format: uri }
+
+    Preferences:
+      type: object
+      description: Schema-validated on write — not a free-form blob.
+      additionalProperties: false
+      properties:
+        notifications:
+          type: object
+          additionalProperties: false
+          properties:
+            email: { type: boolean }
+            sms: { type: boolean }
+            membershipExpiry: { type: boolean }
+        locale: { type: string }
+
+    Organisation:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        slug: { type: string }
+        onboardingStatus: { type: string, enum: [INCOMPLETE, COMPLETE] }
+        isActive: { type: boolean }
+        createdAt: { type: string, format: date-time }
+
+    GymInput:
+      type: object
+      additionalProperties: false
+      required: [name, address, city, region]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        address: { type: string }
+        city: { type: string }
+        region: { type: string }
+        country: { type: string, default: Ghana }
+        latitude: { type: number }
+        longitude: { type: number }
+        phone: { type: string }
+        email: { type: string, format: email }
+        website: { type: string, format: uri }
+        logoUrl: { type: string, format: uri }
+        coverUrl: { type: string, format: uri }
+
+    Gym:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        organisationId: { type: string, format: uuid }
+        name: { type: string }
+        slug: { type: string }
+        description: { type: [string, 'null'] }
+        address: { type: string }
+        city: { type: string }
+        region: { type: string }
+        country: { type: string }
+        latitude: { type: [number, 'null'] }
+        longitude: { type: [number, 'null'] }
+        phone: { type: [string, 'null'] }
+        email: { type: [string, 'null'] }
+        website: { type: [string, 'null'] }
+        logoUrl: { type: [string, 'null'] }
+        coverUrl: { type: [string, 'null'] }
+        operatingHours: { $ref: '#/components/schemas/OperatingHours' }
+        settings: { $ref: '#/components/schemas/GymSettings' }
+        isActive: { type: boolean }
+        archivedAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    PublicGym:
+      type: object
+      description: |
+        The public directory projection. Excludes `settings`, staff, member counts, and owner contact
+        details — a public endpoint must not leak tenant internals.
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        slug: { type: string }
+        description: { type: [string, 'null'] }
+        address: { type: string }
+        city: { type: string }
+        region: { type: string }
+        country: { type: string }
+        latitude: { type: [number, 'null'] }
+        longitude: { type: [number, 'null'] }
+        phone: { type: [string, 'null'] }
+        logoUrl: { type: [string, 'null'] }
+        coverUrl: { type: [string, 'null'] }
+        operatingHours: { $ref: '#/components/schemas/OperatingHours' }
+
+    OperatingHours:
+      type: object
+      description: Schema-validated on write. Omit a day to mean closed.
+      additionalProperties: false
+      properties:
+        monday: { $ref: '#/components/schemas/DayHours' }
+        tuesday: { $ref: '#/components/schemas/DayHours' }
+        wednesday: { $ref: '#/components/schemas/DayHours' }
+        thursday: { $ref: '#/components/schemas/DayHours' }
+        friday: { $ref: '#/components/schemas/DayHours' }
+        saturday: { $ref: '#/components/schemas/DayHours' }
+        sunday: { $ref: '#/components/schemas/DayHours' }
+
+    DayHours:
+      type: object
+      additionalProperties: false
+      required: [open, close]
+      properties:
+        open: { type: string, pattern: '^([01]\d|2[0-3]):[0-5]\d$', examples: ['06:00'] }
+        close: { type: string, pattern: '^([01]\d|2[0-3]):[0-5]\d$', examples: ['22:00'] }
+
+    GymSettings:
+      type: object
+      additionalProperties: false
+      properties:
+        allowSelfEnrolment: { type: boolean }
+        requireCheckInApproval: { type: boolean }
+        currency: { type: string, const: GHS }
+
+    Employment:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        gymId: { type: string, format: uuid }
+        profileId: { type: [string, 'null'], format: uuid, description: Null while an invite is unclaimed }
+        invitedEmail: { type: [string, 'null'], format: email }
+        role: { $ref: '#/components/schemas/Role' }
+        isActive: { type: boolean }
+        startDate: { type: string, format: date-time }
+        endDate: { type: [string, 'null'], format: date-time }
+        profile: { $ref: '#/components/schemas/PublicProfile' }
+
+    PlanInput:
+      type: object
+      additionalProperties: false
+      required: [name, price, duration, durationUnit]
+      properties:
+        name: { type: string, minLength: 1 }
+        description: { type: string }
+        price: { $ref: '#/components/schemas/Money' }
+        duration: { type: integer, minimum: 1 }
+        durationUnit: { $ref: '#/components/schemas/DurationUnit' }
+        features: { type: array, items: { type: string } }
+        maxVisits: { type: [integer, 'null'], minimum: 1, description: Null means unlimited }
+        sortOrder: { type: integer, default: 0 }
+
+    Plan:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        gymId: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: [string, 'null'] }
+        price: { $ref: '#/components/schemas/Money' }
+        currency: { type: string, const: GHS }
+        duration: { type: integer }
+        durationUnit: { $ref: '#/components/schemas/DurationUnit' }
+        features: { type: array, items: { type: string } }
+        maxVisits: { type: [integer, 'null'] }
+        sortOrder: { type: integer }
+        isActive: { type: boolean }
+        archivedAt: { type: [string, 'null'], format: date-time }
+
+    Membership:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        gymId: { type: string, format: uuid }
+        profileId: { type: string, format: uuid }
+        planId: { type: string, format: uuid }
+        status: { $ref: '#/components/schemas/MembershipStatus' }
+        agreedPrice:
+          allOf: [{ $ref: '#/components/schemas/Money' }]
+          description: Snapshotted from the plan at enrolment — a later plan edit does not change it.
+        agreedDuration: { type: integer }
+        agreedDurationUnit: { $ref: '#/components/schemas/DurationUnit' }
+        startDate: { type: [string, 'null'], format: date-time }
+        endDate: { type: [string, 'null'], format: date-time }
+        autoRenew: { type: boolean }
+        visitsUsed: { type: integer }
+        cancelledAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
+        plan: { $ref: '#/components/schemas/Plan' }
+        profile: { $ref: '#/components/schemas/PublicProfile' }
+
+    Payment:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        gymId: { type: string, format: uuid }
+        profileId: { type: string, format: uuid }
+        membershipId: { type: [string, 'null'], format: uuid }
+        amount: { $ref: '#/components/schemas/Money' }
+        currency: { type: string, const: GHS }
+        reference: { type: string }
+        provider: { type: string, enum: [PAYSTACK, SIMULATOR] }
+        channel: { type: [string, 'null'], enum: [MOBILE_MONEY, CARD, CASH, null] }
+        status: { $ref: '#/components/schemas/PaymentStatus' }
+        paidAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
+
+    CheckIn:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        gymId: { type: string, format: uuid }
+        membershipId: { type: string, format: uuid }
+        profileId: { type: string, format: uuid }
+        method: { type: string, enum: [MANUAL, QR, CARD] }
+        checkedInAt: { type: string, format: date-time }
+        checkedOutAt: { type: [string, 'null'], format: date-time }
+        profile: { $ref: '#/components/schemas/PublicProfile' }
+
+    AuthSession:
+      type: object
+      properties:
+        account: { $ref: '#/components/schemas/Account' }
+        profile: { $ref: '#/components/schemas/Profile' }
+        tokens: { $ref: '#/components/schemas/Tokens' }
+
+    Tokens:
+      type: object
+      required: [accessToken, refreshToken, expiresIn]
+      properties:
+        accessToken: { type: string }
+        refreshToken: { type: string }
+        expiresIn: { type: integer, description: Access token lifetime in seconds }
