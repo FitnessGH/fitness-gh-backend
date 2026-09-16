@@ -11,61 +11,70 @@ class PaymentService {
    * Simulate initiating a payment
    */
   async initiatePayment(data: InitiatePaymentData): Promise<PaymentResponse> {
-    const membership = await prisma.membership.findFirst({
-      where: {
-        id: data.membershipId,
-        profileId: data.profileId,
-        status: "PENDING",
-      },
-      include: {
-        plan: {
-          select: {
-            price: true,
-            currency: true,
+    return await prisma.$transaction(async (transaction) => {
+      const lockedMembership = await transaction.membership.updateMany({
+        where: {
+          id: data.membershipId,
+          profileId: data.profileId,
+          status: "PENDING",
+        },
+        data: { updatedAt: new Date() },
+      });
+
+      if (lockedMembership.count === 0) {
+        throw new NotFoundError({ message: "Membership not found" });
+      }
+
+      const membership = await transaction.membership.findUniqueOrThrow({
+        where: { id: data.membershipId },
+        include: {
+          plan: {
+            select: {
+              price: true,
+              currency: true,
+            },
           },
         },
-      },
+      });
+
+      if (membership.plan.price <= 0) {
+        throw new BadRequestError({ message: "A payment requires a plan with a positive price" });
+      }
+
+      const pendingPayment = await transaction.payment.findFirst({
+        where: {
+          membershipId: membership.id,
+          status: "PENDING",
+        },
+        orderBy: { createdAt: "desc" },
+      });
+
+      const payment = pendingPayment ?? await transaction.payment.create({
+        data: {
+          profileId: data.profileId,
+          gymId: membership.gymId,
+          membershipId: membership.id,
+          amount: membership.plan.price,
+          currency: membership.plan.currency,
+          reference: `REF-${randomBytes(4).toString("hex").toUpperCase()}-${Date.now()}`,
+          provider: "SIMULATOR",
+          channel: data.channel || "mobile_money",
+          status: "PENDING",
+        },
+      });
+
+      return {
+        id: payment.id,
+        reference: payment.reference,
+        amount: payment.amount,
+        currency: payment.currency,
+        status: payment.status,
+        provider: payment.provider,
+        authorizationUrl: `https://checkout.simulated-pay.com/${payment.reference}?amount=${payment.amount}`,
+        createdAt: payment.createdAt,
+        updatedAt: payment.updatedAt,
+      };
     });
-
-    if (!membership) {
-      throw new NotFoundError({ message: "Membership not found" });
-    }
-
-    if (membership.plan.price <= 0) {
-      throw new BadRequestError({ message: "A payment requires a plan with a positive price" });
-    }
-
-    // Generate a reference
-    const reference = `REF-${randomBytes(4).toString("hex").toUpperCase()}-${Date.now()}`;
-
-    // Simulate provider URL (in a real app, this comes from Paystack/Stripe)
-    const authorizationUrl = `https://checkout.simulated-pay.com/${reference}?amount=${membership.plan.price}`;
-
-    const payment = await prisma.payment.create({
-      data: {
-        profileId: data.profileId,
-        gymId: membership.gymId,
-        membershipId: membership.id,
-        amount: membership.plan.price,
-        currency: membership.plan.currency,
-        reference,
-        provider: "SIMULATOR",
-        channel: data.channel || "mobile_money",
-        status: "PENDING",
-      },
-    });
-
-    return {
-      id: payment.id,
-      reference: payment.reference,
-      amount: payment.amount,
-      currency: payment.currency,
-      status: payment.status,
-      provider: payment.provider,
-      authorizationUrl,
-      createdAt: payment.createdAt,
-      updatedAt: payment.updatedAt,
-    };
   }
 
   /**
@@ -97,22 +106,21 @@ class PaymentService {
   async handleWebhook(event: WebhookEvent): Promise<void> {
     if (event.event === "charge.success") {
       const { reference } = event.data;
-
-      const payment = await prisma.payment.findUnique({
-        where: { reference },
-        include: {
-          membership: {
-            include: { plan: true },
-          },
-        },
-      });
-
-      if (!payment) {
-        return;
-      }
-
       const paidAt = new Date();
       await prisma.$transaction(async (transaction) => {
+        const payment = await transaction.payment.findUnique({
+          where: { reference },
+          include: {
+            membership: {
+              include: { plan: true },
+            },
+          },
+        });
+
+        if (!payment) {
+          return;
+        }
+
         const completedPayment = await transaction.payment.updateMany({
           where: {
             id: payment.id,
@@ -129,7 +137,7 @@ class PaymentService {
         }
 
         if (!payment.membership) {
-          return;
+          throw new BadRequestError({ message: "Payment is not linked to a membership" });
         }
 
         const startDate = paidAt;
@@ -148,14 +156,17 @@ class PaymentService {
         });
 
         if (activatedMembership.count === 0) {
-          await transaction.membership.updateMany({
+          const linkedMembership = await transaction.membership.findFirst({
             where: {
               id: payment.membership.id,
               status: "ACTIVE",
-              lastPaymentId: null,
+              lastPaymentId: payment.id,
             },
-            data: { lastPaymentId: payment.id },
           });
+
+          if (!linkedMembership) {
+            throw new BadRequestError({ message: "Membership cannot be activated" });
+          }
         }
       });
     }
