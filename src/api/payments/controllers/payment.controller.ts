@@ -8,6 +8,7 @@ import type { AuthenticatedRequest } from "../../../middlewares/auth.middleware.
 import type { ApiResponse } from "../../../types/api-response.type.js";
 
 import config from "../../../config/env.config.js";
+import { BadRequestError } from "../../../errors/bad-request.error.js";
 import { ForbiddenError } from "../../../errors/forbidden.error.js";
 import { UnauthorizedError } from "../../../errors/unauthorized.error.js";
 import GymService from "../../gyms/services/gym.service.js";
@@ -103,7 +104,15 @@ class PaymentController {
         throw new UnauthorizedError({ message: "Invalid payment webhook signature" });
       }
 
-      const event = parse(webhookSchema, JSON.parse(rawBody.toString("utf8")));
+      let payload: unknown;
+      try {
+        payload = JSON.parse(rawBody.toString("utf8"));
+      }
+      catch {
+        throw new BadRequestError({ message: "Invalid payment webhook payload" });
+      }
+
+      const event = parse(webhookSchema, payload);
 
       // Async processing
       await PaymentService.handleWebhook(event);
