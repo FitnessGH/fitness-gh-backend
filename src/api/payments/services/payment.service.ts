@@ -1,8 +1,8 @@
 import { randomBytes } from "crypto";
 
 import { prisma } from "../../../core/services/prisma.service.js";
+import { ConflictError } from "../../../errors/conflict.error.js";
 import { NotFoundError } from "../../../errors/not-found.error.js";
-import SubscriptionService from "../../subscriptions/services/subscription.service.js";
 
 import type { InitiatePaymentData, PaymentResponse, VerifyPaymentResponse, WebhookEvent } from "../types/payment.types.js";
 
@@ -95,30 +95,79 @@ class PaymentService {
       
       const payment = await prisma.payment.findUnique({
         where: { reference },
+        include: {
+          membership: {
+            include: { plan: true },
+          },
+        },
       });
 
       if (!payment) {
-        // Log error but don't throw to avoid 500 to webhook caller
-        console.error(`Webhook error: Payment ${reference} not found`);
         return;
       }
 
-      if (payment.status !== "COMPLETED") {
-        // Update payment status
-        await prisma.payment.update({
-          where: { id: payment.id },
+      const paidAt = new Date();
+      await prisma.$transaction(async (transaction) => {
+        const completedPayment = await transaction.payment.updateMany({
+          where: {
+            id: payment.id,
+            status: "PENDING",
+          },
           data: {
             status: "COMPLETED",
-            paidAt: new Date(),
+            paidAt,
           },
         });
 
-        // If linked to membership, activate it
-        if (payment.membershipId) {
-          await SubscriptionService.activateMembership(payment.membershipId, payment.id);
+        if (completedPayment.count === 0) {
+          return;
         }
-      }
+
+        if (!payment.membership) {
+          return;
+        }
+
+        const startDate = paidAt;
+        const endDate = this.calculateEndDate(startDate, payment.membership.plan.duration, payment.membership.plan.durationUnit);
+        const activatedMembership = await transaction.membership.updateMany({
+          where: {
+            id: payment.membership.id,
+            status: "PENDING",
+          },
+          data: {
+            status: "ACTIVE",
+            startDate,
+            endDate,
+            lastPaymentId: payment.id,
+          },
+        });
+
+        if (activatedMembership.count === 0) {
+          throw new ConflictError({ message: "Membership cannot be activated" });
+        }
+      });
     }
+  }
+
+  private calculateEndDate(startDate: Date, duration: number, durationUnit: "DAYS" | "WEEKS" | "MONTHS" | "YEARS"): Date {
+    const endDate = new Date(startDate);
+
+    switch (durationUnit) {
+      case "DAYS":
+        endDate.setDate(endDate.getDate() + duration);
+        break;
+      case "WEEKS":
+        endDate.setDate(endDate.getDate() + duration * 7);
+        break;
+      case "MONTHS":
+        endDate.setMonth(endDate.getMonth() + duration);
+        break;
+      case "YEARS":
+        endDate.setFullYear(endDate.getFullYear() + duration);
+        break;
+    }
+
+    return endDate;
   }
 
   /**
