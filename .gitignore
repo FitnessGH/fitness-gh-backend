@@ -78,3 +78,4 @@ examples
 /src/generated/prisma
 .vercel
 .DS_Store
+.claude
