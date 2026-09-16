@@ -4,6 +4,7 @@ import type { InitiatePaymentData, PaymentResponse, VerifyPaymentResponse, Webho
 
 import { prisma } from "../../../core/services/prisma.service.js";
 import { BadRequestError } from "../../../errors/bad-request.error.js";
+import { ConflictError } from "../../../errors/conflict.error.js";
 import { NotFoundError } from "../../../errors/not-found.error.js";
 
 class PaymentService {
@@ -12,21 +13,11 @@ class PaymentService {
    */
   async initiatePayment(data: InitiatePaymentData): Promise<PaymentResponse> {
     return await prisma.$transaction(async (transaction) => {
-      const lockedMembership = await transaction.membership.updateMany({
+      const membership = await transaction.membership.findFirst({
         where: {
           id: data.membershipId,
           profileId: data.profileId,
-          status: "PENDING",
         },
-        data: { updatedAt: new Date() },
-      });
-
-      if (lockedMembership.count === 0) {
-        throw new NotFoundError({ message: "Membership not found" });
-      }
-
-      const membership = await transaction.membership.findUniqueOrThrow({
-        where: { id: data.membershipId },
         include: {
           plan: {
             select: {
@@ -36,6 +27,30 @@ class PaymentService {
           },
         },
       });
+
+      if (!membership) {
+        throw new NotFoundError({ message: "Membership not found" });
+      }
+
+      if (membership.status === "ACTIVE") {
+        throw new ConflictError({ message: "Membership is already active" });
+      }
+
+      if (membership.status !== "PENDING") {
+        throw new NotFoundError({ message: "Membership not found" });
+      }
+
+      const lockedMembership = await transaction.membership.updateMany({
+        where: {
+          id: membership.id,
+          status: "PENDING",
+        },
+        data: { updatedAt: new Date() },
+      });
+
+      if (lockedMembership.count === 0) {
+        throw new NotFoundError({ message: "Membership not found" });
+      }
 
       if (membership.plan.price <= 0) {
         throw new BadRequestError({ message: "A payment requires a plan with a positive price" });

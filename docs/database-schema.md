@@ -212,8 +212,9 @@ ALTER TABLE roles ADD CONSTRAINT roles_system_org_check
 
 ## Indexes
 
-**⚠ current: the schema has zero indexes** — no `@@index` anywhere, and **Prisma does not auto-index foreign keys on
-PostgreSQL** (H-02). Every list query in the service is a sequential scan.
+**⚠ current: the schema has only one hand-added index** (`payments(membershipId, status, createdAt)`, added
+alongside the C-01 payment-initiation query it serves) — otherwise no `@@index` anywhere, and **Prisma does not
+auto-index foreign keys on PostgreSQL** (H-02). Every other list query in the service is a sequential scan.
 
 Required beyond primary keys and uniques:
 
