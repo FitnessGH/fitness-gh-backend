@@ -2,10 +2,7 @@ import type { Payment, PaymentStatus } from "@prisma/client";
 
 export type InitiatePaymentData = {
   profileId: string;
-  gymId: string;
-  membershipId?: string;
-  amount: number;
-  currency?: string;
+  membershipId: string;
   channel?: string;
   metadata?: Record<string, unknown>;
 };

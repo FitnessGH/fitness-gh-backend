@@ -11,19 +11,38 @@ class PaymentService {
    * Simulate initiating a payment
    */
   async initiatePayment(data: InitiatePaymentData): Promise<PaymentResponse> {
+    const membership = await prisma.membership.findFirst({
+      where: {
+        id: data.membershipId,
+        profileId: data.profileId,
+      },
+      include: {
+        plan: {
+          select: {
+            price: true,
+            currency: true,
+          },
+        },
+      },
+    });
+
+    if (!membership) {
+      throw new NotFoundError({ message: "Membership not found" });
+    }
+
     // Generate a reference
     const reference = `REF-${randomBytes(4).toString("hex").toUpperCase()}-${Date.now()}`;
     
     // Simulate provider URL (in a real app, this comes from Paystack/Stripe)
-    const authorizationUrl = `https://checkout.simulated-pay.com/${reference}?amount=${data.amount}`;
+    const authorizationUrl = `https://checkout.simulated-pay.com/${reference}?amount=${membership.plan.price}`;
 
     const payment = await prisma.payment.create({
       data: {
         profileId: data.profileId,
-        gymId: data.gymId,
-        membershipId: data.membershipId,
-        amount: data.amount,
-        currency: data.currency || "GHS",
+        gymId: membership.gymId,
+        membershipId: membership.id,
+        amount: membership.plan.price,
+        currency: membership.plan.currency,
         reference,
         provider: "SIMULATOR",
         channel: data.channel || "mobile_money",
