@@ -1,5 +1,5 @@
 /* eslint-disable node/no-process-env */
-import { ValiError, minLength, number, object, optional, picklist, pipe, string, transform, parse } from "valibot";
+import { minLength, number, object, optional, parse, picklist, pipe, string, transform, ValiError } from "valibot";
 
 // Default secrets for development/test (DO NOT use in production!)
 const DEV_SECRET = "development-only-secret-key-min-32-characters-long";
@@ -23,11 +23,36 @@ const envSchema = object({
   JWT_REFRESH_SECRET: optional(string(), DEV_SECRET),
   JWT_ACCESS_EXPIRY: optional(string(), "15m"),
   JWT_REFRESH_EXPIRY: optional(string(), "7d"),
+
+  // SMTP (email delivery falls back to a mock/logging service when unset)
+  SMTP_SERVER: optional(string(), "smtp-relay.brevo.com"),
+  SMTP_PORT: optional(string(), "587"),
+  SMTP_USER: optional(string()),
+  SMTP_PASS: optional(string()),
+
+  // Vercel Blob storage token for uploads
+  BLOB_READ_WRITE_TOKEN: optional(string()),
 });
 
 function parseEnv() {
   try {
-    return parse(envSchema, process.env);
+    const parsedEnv = parse(envSchema, process.env);
+
+    if (parsedEnv.NODE_ENV === "production") {
+      if (parsedEnv.JWT_ACCESS_SECRET === DEV_SECRET || parsedEnv.JWT_ACCESS_SECRET.length < 32) {
+        throw new Error("JWT_ACCESS_SECRET must be configured with at least 32 characters in production");
+      }
+
+      if (parsedEnv.JWT_REFRESH_SECRET === DEV_SECRET || parsedEnv.JWT_REFRESH_SECRET.length < 32) {
+        throw new Error("JWT_REFRESH_SECRET must be configured with at least 32 characters in production");
+      }
+
+      if (parsedEnv.JWT_ACCESS_SECRET === parsedEnv.JWT_REFRESH_SECRET) {
+        throw new Error("JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must be different in production");
+      }
+    }
+
+    return parsedEnv;
   }
   catch (error) {
     if (error instanceof ValiError) {
@@ -45,7 +70,6 @@ export const env = parseEnv();
 
 // A configuration object to hold validated environment variables
 const config = {
-  env: process.env,
   nodeEnv: env.NODE_ENV,
   port: env.PORT ?? 5001,
   databaseUrl: env.DATABASE_URL,
