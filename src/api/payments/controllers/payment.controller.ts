@@ -1,20 +1,24 @@
 import type { NextFunction, Request, Response } from "express";
 
+import { Buffer } from "node:buffer";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { parse } from "valibot";
 
-import type { ApiResponse } from "../../../types/api-response.type.js";
 import type { AuthenticatedRequest } from "../../../middlewares/auth.middleware.js";
-import { ForbiddenError } from "../../../errors/forbidden.error.js";
-import { NotFoundError } from "../../../errors/not-found.error.js";
-import GymService from "../../gyms/services/gym.service.js";
+import type { ApiResponse } from "../../../types/api-response.type.js";
 
+import config from "../../../config/env.config.js";
+import { BadRequestError } from "../../../errors/bad-request.error.js";
+import { ForbiddenError } from "../../../errors/forbidden.error.js";
+import { UnauthorizedError } from "../../../errors/unauthorized.error.js";
+import GymService from "../../gyms/services/gym.service.js";
+import { gymIdSchema } from "../../gyms/validations/gym.validation.js";
 import PaymentService from "../services/payment.service.js";
 import {
   initiatePaymentSchema,
   verifyPaymentSchema,
   webhookSchema,
 } from "../validations/payment.validation.js";
-import { gymIdSchema } from "../../gyms/validations/gym.validation.js";
 
 class PaymentController {
   /**
@@ -86,11 +90,32 @@ class PaymentController {
     next: NextFunction,
   ): Promise<void> {
     try {
-      // In real scenario, validate signature here
-      const event = parse(webhookSchema, req.body);
-      
+      const signature = req.header("X-Signature");
+      const rawBody = req.body as Buffer;
+
+      if (!Buffer.isBuffer(rawBody) || !signature || !/^[a-f\d]{64}$/i.test(signature)) {
+        throw new UnauthorizedError({ message: "Invalid payment webhook signature" });
+      }
+
+      const expectedSignature = createHmac("sha256", config.paymentsWebhookSecret).update(rawBody).digest();
+      const receivedSignature = Buffer.from(signature, "hex");
+
+      if (!timingSafeEqual(receivedSignature, expectedSignature)) {
+        throw new UnauthorizedError({ message: "Invalid payment webhook signature" });
+      }
+
+      let payload: unknown;
+      try {
+        payload = JSON.parse(rawBody.toString("utf8"));
+      }
+      catch {
+        throw new BadRequestError({ message: "Invalid payment webhook payload" });
+      }
+
+      const event = parse(webhookSchema, payload);
+
       // Async processing
-      await PaymentService.handleWebhook(event as any);
+      await PaymentService.handleWebhook(event);
 
       res.status(200).json({
         success: true,

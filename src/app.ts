@@ -6,6 +6,7 @@ import helmet from "helmet";
 import morgan from "morgan";
 
 import apiRoute from "./api/index.js";
+import { PaymentController } from "./api/payments/index.js";
 import { API_PREFIXES } from "./config/constants.config.js";
 import config from "./config/env.config.js";
 import healthStatusRoute from "./core/routes/health-check.route.js";
@@ -24,6 +25,7 @@ app.use(cors({
   credentials: true,
 }));
 app.use(morgan("combined"));
+app.post(`${API_PREFIXES.V1}/payments/webhook`, express.raw({ type: "application/json" }), PaymentController.webhook);
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 

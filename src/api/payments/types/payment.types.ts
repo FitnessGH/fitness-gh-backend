@@ -2,10 +2,7 @@ import type { Payment, PaymentStatus } from "@prisma/client";
 
 export type InitiatePaymentData = {
   profileId: string;
-  gymId: string;
-  membershipId?: string;
-  amount: number;
-  currency?: string;
+  membershipId: string;
   channel?: string;
   metadata?: Record<string, unknown>;
 };
@@ -36,10 +33,7 @@ export type WebhookEvent = {
   event: string; // e.g., "charge.success"
   data: {
     reference: string;
-    amount: number;
-    currency: string;
     status: string;
-    metadata?: Record<string, unknown>;
   };
 };
 

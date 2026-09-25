@@ -1,37 +1,24 @@
+import type { InferOutput } from "valibot";
+
 import {
-  maxLength,
+
   minLength,
-  minValue,
-  number,
   object,
   optional,
   picklist,
   pipe,
   record,
+  strictObject,
   string,
   unknown,
-  type InferOutput,
 } from "valibot";
 
 // Initiate payment schema
-export const initiatePaymentSchema = object({
-  gymId: pipe(
-    string(),
-    minLength(1, "Gym ID is required"),
-  ),
-  membershipId: optional(pipe(
+export const initiatePaymentSchema = strictObject({
+  membershipId: pipe(
     string(),
     minLength(1, "Membership ID is required"),
-  )),
-  amount: pipe(
-    number(),
-    minValue(0.01, "Amount must be positive"),
   ),
-  currency: optional(pipe(
-    string(),
-    minLength(3),
-    maxLength(3),
-  ), "GHS"),
   channel: optional(picklist(["mobile_money", "card"])),
   metadata: optional(record(string(), unknown())),
 });
