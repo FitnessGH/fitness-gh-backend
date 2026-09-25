@@ -58,12 +58,14 @@ class UserService {
   }
 
   /**
-   * Get profile by ID
+   * Get profile by ID. Archived profiles are treated as not found.
    */
   static async getProfileById(id: string): Promise<UserProfile | null> {
-    return await prisma.userProfile.findUnique({
+    const profile = await prisma.userProfile.findUnique({
       where: { id },
     });
+
+    return profile?.archivedAt ? null : profile;
   }
 
   /**
@@ -101,7 +103,7 @@ class UserService {
   }
 
   /**
-   * Delete profile by ID (cascades from account deletion)
+   * Soft-delete profile by ID (archives; never a hard delete)
    */
   static async deleteProfile(id: string): Promise<void> {
     // Business logic: Check if profile exists
@@ -110,8 +112,9 @@ class UserService {
       throw new Error("Profile not found");
     }
 
-    await prisma.userProfile.delete({
+    await prisma.userProfile.update({
       where: { id },
+      data: { archivedAt: new Date() },
     });
   }
 

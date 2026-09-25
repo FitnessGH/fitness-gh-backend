@@ -109,6 +109,7 @@ model UserProfile {
   // Timestamps
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  archivedAt  DateTime?
   
   // Relations
   ownedGyms   Gym[]        @relation("GymOwner")

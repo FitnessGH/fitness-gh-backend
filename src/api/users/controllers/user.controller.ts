@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 
 import { parse, ValiError } from "valibot";
 
+import type { AuthenticatedRequest } from "../../../middlewares/auth.middleware.js";
 import type { ProfileStatsResponse } from "../types/user.types.js";
 
 import { error, success } from "../../../utils/response.util.js";
@@ -13,6 +14,45 @@ import {
 } from "../validations/user.validation.js";
 
 class UserController {
+  /**
+   * Update the authenticated caller's own profile
+   */
+  static async updateMe(req: Request, res: Response): Promise<void> {
+    try {
+      const profileId = (req as AuthenticatedRequest).profileId;
+
+      if (!profileId) {
+        res.status(403).json(error("Profile not found for this account", 403, null, null));
+        return;
+      }
+
+      const profileData = parse(updateUserSchema, req.body);
+      const profile = await UserService.updateProfile(profileId, profileData);
+
+      res.json(success(profile));
+    }
+    catch (err) {
+      console.error("Error updating own profile:", err);
+
+      if (err instanceof ValiError) {
+        res.status(400).json(error(
+          "Invalid request data",
+          400,
+          err.issues,
+          null,
+        ));
+        return;
+      }
+
+      if (err instanceof Error && err.message === "Profile not found") {
+        res.status(404).json(error(err.message, 404, null, null));
+        return;
+      }
+
+      res.status(500).json(error("Failed to update profile", 500, null, null));
+    }
+  }
+
   /**
    * Get all profiles
    * If query param `withAccounts=true`, returns users with account info (for admin)
