@@ -1,18 +1,58 @@
 import type { Request, Response } from "express";
 
-import { ValiError, parse } from "valibot";
+import { parse, ValiError } from "valibot";
 
+import type { AuthenticatedRequest } from "../../../middlewares/auth.middleware.js";
 import type { ProfileStatsResponse } from "../types/user.types.js";
 
+import { error, success } from "../../../utils/response.util.js";
 import UserService from "../services/user.service.js";
 import {
   searchUserSchema,
   updateUserSchema,
   userIdSchema,
 } from "../validations/user.validation.js";
-import { error, success } from "../../../utils/response.util.js";
 
 class UserController {
+  /**
+   * Update the authenticated caller's own profile
+   */
+  static async updateMe(req: Request, res: Response): Promise<void> {
+    try {
+      const profileId = (req as AuthenticatedRequest).profileId;
+
+      if (!profileId) {
+        res.status(403).json(error("Profile not found for this account", 403, null, null));
+        return;
+      }
+
+      const profileData = parse(updateUserSchema, req.body);
+      const profile = await UserService.updateProfile(profileId, profileData);
+
+      res.json(success(profile));
+    }
+    catch (err) {
+      console.error("Error updating own profile:", err);
+
+      if (err instanceof ValiError) {
+        res.status(400).json(error(
+          "Invalid request data",
+          400,
+          err.issues,
+          null,
+        ));
+        return;
+      }
+
+      if (err instanceof Error && err.message === "Profile not found") {
+        res.status(404).json(error(err.message, 404, null, null));
+        return;
+      }
+
+      res.status(500).json(error("Failed to update profile", 500, null, null));
+    }
+  }
+
   /**
    * Get all profiles
    * If query param `withAccounts=true`, returns users with account info (for admin)
@@ -20,17 +60,18 @@ class UserController {
   static async getUsers(req: Request, res: Response): Promise<void> {
     try {
       const withAccountsParam = req.query.withAccounts;
-      const withAccounts = withAccountsParam === 'true' || withAccountsParam === '1';
-      
-      console.log('getUsers called with withAccounts:', withAccounts, 'query:', req.query);
-      
+      const withAccounts = withAccountsParam === "true" || withAccountsParam === "1";
+
+      console.log("getUsers called with withAccounts:", withAccounts, "query:", req.query);
+
       if (withAccounts) {
         const users = await UserService.getAllUsersWithAccounts();
-        console.log('Returning users with accounts, count:', users.length);
+        console.log("Returning users with accounts, count:", users.length);
         res.json(success(users));
-      } else {
+      }
+      else {
         const profiles = await UserService.getAllProfiles();
-        console.log('Returning profiles only, count:', profiles.length);
+        console.log("Returning profiles only, count:", profiles.length);
         res.json(success(profiles));
       }
     }
