@@ -49,6 +49,15 @@ class PaymentService {
       });
 
       if (lockedMembership.count === 0) {
+        const currentMembership = await transaction.membership.findUnique({
+          where: { id: membership.id },
+          select: { status: true },
+        });
+
+        if (currentMembership?.status === "ACTIVE") {
+          throw new ConflictError({ message: "Membership is already active" });
+        }
+
         throw new NotFoundError({ message: "Membership not found" });
       }
 
