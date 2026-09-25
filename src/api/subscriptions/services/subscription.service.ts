@@ -1,8 +1,4 @@
-import type { DurationUnit, MembershipStatus, SubscriptionPlan, Membership } from "@prisma/client";
-
-import { prisma } from "../../../core/services/prisma.service.js";
-import { ConflictError } from "../../../errors/conflict.error.js";
-import { NotFoundError } from "../../../errors/not-found.error.js";
+import type { Membership, MembershipStatus, SubscriptionPlan } from "@prisma/client";
 
 import type {
   CreateMembershipData,
@@ -13,6 +9,11 @@ import type {
   UpdateMembershipData,
   UpdatePlanData,
 } from "../types/subscription.types.js";
+
+import { prisma } from "../../../core/services/prisma.service.js";
+import { ConflictError } from "../../../errors/conflict.error.js";
+import { NotFoundError } from "../../../errors/not-found.error.js";
+import { calculateMembershipEndDate } from "../../../utils/membership-duration.util.js";
 
 class SubscriptionService {
   // ========================================
@@ -113,7 +114,7 @@ class SubscriptionService {
 
     // Calculate end date based on plan duration
     const startDate = data.startDate || new Date();
-    const endDate = this.calculateEndDate(startDate, plan.duration, plan.durationUnit);
+    const endDate = calculateMembershipEndDate(startDate, plan.duration, plan.durationUnit);
 
     return await prisma.membership.create({
       data: {
@@ -201,7 +202,7 @@ class SubscriptionService {
       orderBy: { createdAt: "desc" },
     });
 
-    return memberships.map((m) => ({
+    return memberships.map(m => ({
       id: m.id,
       profileId: m.profileId,
       gymId: m.gymId,
@@ -266,7 +267,7 @@ class SubscriptionService {
     }
 
     const startDate = new Date();
-    const endDate = this.calculateEndDate(startDate, membership.plan.duration, membership.plan.durationUnit);
+    const endDate = calculateMembershipEndDate(startDate, membership.plan.duration, membership.plan.durationUnit);
 
     return await prisma.membership.update({
       where: { id: membershipId },
@@ -333,31 +334,6 @@ class SubscriptionService {
       where: { id: membershipId },
       data: { visitsUsed: { increment: 1 } },
     });
-  }
-
-  // ========================================
-  // HELPER METHODS
-  // ========================================
-
-  private calculateEndDate(startDate: Date, duration: number, unit: DurationUnit): Date {
-    const endDate = new Date(startDate);
-
-    switch (unit) {
-      case "DAYS":
-        endDate.setDate(endDate.getDate() + duration);
-        break;
-      case "WEEKS":
-        endDate.setDate(endDate.getDate() + duration * 7);
-        break;
-      case "MONTHS":
-        endDate.setMonth(endDate.getMonth() + duration);
-        break;
-      case "YEARS":
-        endDate.setFullYear(endDate.getFullYear() + duration);
-        break;
-    }
-
-    return endDate;
   }
 }
 

@@ -6,6 +6,7 @@ import { prisma } from "../../../core/services/prisma.service.js";
 import { BadRequestError } from "../../../errors/bad-request.error.js";
 import { ConflictError } from "../../../errors/conflict.error.js";
 import { NotFoundError } from "../../../errors/not-found.error.js";
+import { calculateMembershipEndDate } from "../../../utils/membership-duration.util.js";
 
 class PaymentService {
   /**
@@ -165,7 +166,7 @@ class PaymentService {
         }
 
         const startDate = paidAt;
-        const endDate = this.calculateEndDate(startDate, payment.membership.plan.duration, payment.membership.plan.durationUnit);
+        const endDate = calculateMembershipEndDate(startDate, payment.membership.plan.duration, payment.membership.plan.durationUnit);
         const activatedMembership = await transaction.membership.updateMany({
           where: {
             id: payment.membership.id,
@@ -194,27 +195,6 @@ class PaymentService {
         }
       });
     }
-  }
-
-  private calculateEndDate(startDate: Date, duration: number, durationUnit: "DAYS" | "WEEKS" | "MONTHS" | "YEARS"): Date {
-    const endDate = new Date(startDate);
-
-    switch (durationUnit) {
-      case "DAYS":
-        endDate.setDate(endDate.getDate() + duration);
-        break;
-      case "WEEKS":
-        endDate.setDate(endDate.getDate() + duration * 7);
-        break;
-      case "MONTHS":
-        endDate.setMonth(endDate.getMonth() + duration);
-        break;
-      case "YEARS":
-        endDate.setFullYear(endDate.getFullYear() + duration);
-        break;
-    }
-
-    return endDate;
   }
 
   /**
