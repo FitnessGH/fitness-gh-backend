@@ -1,16 +1,16 @@
 import type { Request, Response } from "express";
 
-import { ValiError, parse } from "valibot";
+import { parse, ValiError } from "valibot";
 
 import type { ProfileStatsResponse } from "../types/user.types.js";
 
+import { error, success } from "../../../utils/response.util.js";
 import UserService from "../services/user.service.js";
 import {
   searchUserSchema,
   updateUserSchema,
   userIdSchema,
 } from "../validations/user.validation.js";
-import { error, success } from "../../../utils/response.util.js";
 
 class UserController {
   /**
@@ -20,17 +20,18 @@ class UserController {
   static async getUsers(req: Request, res: Response): Promise<void> {
     try {
       const withAccountsParam = req.query.withAccounts;
-      const withAccounts = withAccountsParam === 'true' || withAccountsParam === '1';
-      
-      console.log('getUsers called with withAccounts:', withAccounts, 'query:', req.query);
-      
+      const withAccounts = withAccountsParam === "true" || withAccountsParam === "1";
+
+      console.log("getUsers called with withAccounts:", withAccounts, "query:", req.query);
+
       if (withAccounts) {
         const users = await UserService.getAllUsersWithAccounts();
-        console.log('Returning users with accounts, count:', users.length);
+        console.log("Returning users with accounts, count:", users.length);
         res.json(success(users));
-      } else {
+      }
+      else {
         const profiles = await UserService.getAllProfiles();
-        console.log('Returning profiles only, count:', profiles.length);
+        console.log("Returning profiles only, count:", profiles.length);
         res.json(success(profiles));
       }
     }

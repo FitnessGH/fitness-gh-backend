@@ -1,8 +1,8 @@
 import type { UserProfile } from "@prisma/client";
 
-import { prisma } from "../../../core/services/prisma.service.js";
+import type { ProfileResponse, UpdateProfileData } from "../types/user.types.js";
 
-import type { CreateProfileData, UpdateProfileData, ProfileResponse } from "../types/user.types.js";
+import { prisma } from "../../../core/services/prisma.service.js";
 
 class UserService {
   /**
@@ -53,7 +53,7 @@ class UserService {
           },
         },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
     });
   }
 
